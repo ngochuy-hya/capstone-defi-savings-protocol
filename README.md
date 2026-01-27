@@ -161,8 +161,8 @@ savingsBank.fundVault(100000 * 10**6); // 100k USDC
 
 ## 📚 Documentation
 
-- **[IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md)** - Detailed technical specifications and implementation plan
-- **[TASKS.md](./TASKS.md)** - Daily task breakdown and progress tracking
+- **[IMPLEMENTATION_PLAN.md](./docs/IMPLEMENTATION_PLAN.md)** - Detailed technical specifications and implementation plan
+- **[TASKS.md](./docs/TASKS.md)** - Daily task breakdown and progress tracking
 - **Walkthrough.md** - Coming soon (deployment guide with screenshots)
 
 ---
