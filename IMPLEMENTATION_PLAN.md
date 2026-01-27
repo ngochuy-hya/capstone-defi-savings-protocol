@@ -1,6 +1,6 @@
 # Kế Hoạch Triển Khai DeFi Savings Protocol (Capstone Project)
 > **Timeline:** Thứ 2 (27/1) → Thứ 5 (30/1) - Target: Hoàn thành sớm 1 ngày  
-> **Sinh viên IT năm 4 - Blockchain Internship**
+> **Nguyễn Ngọc Huy - Blockchain Internship - AppsCyclone**
 
 
 ---
