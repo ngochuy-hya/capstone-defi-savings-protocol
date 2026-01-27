@@ -204,12 +204,16 @@ contract SavingsBank is ReentrancyGuard, Pausable, AccessControl {
         _;
     }
 
-    // Placeholder Functions
-    // Các function này sẽ được implement ở phần chiều và tối
+    // ==================== ADMIN FUNCTIONS ====================
     
     /**
-     * @dev [TO BE IMPLEMENTED] Admin tạo plan mới
-     * Sẽ implement ở phần CHIỀU
+     * @dev Admin tạo plan tiết kiệm mới
+     * @param tenorDays Kỳ hạn (số ngày)
+     * @param aprBps Lãi suất năm (basis points: 800 = 8%)
+     * @param minDeposit Số tiền gửi tối thiểu
+     * @param maxDeposit Số tiền gửi tối đa (0 = không giới hạn)
+     * @param earlyWithdrawPenaltyBps Phạt rút sớm (basis points)
+     * @return planId ID của plan mới được tạo
      */
     function createPlan(
         uint32 tenorDays,
@@ -218,10 +222,150 @@ contract SavingsBank is ReentrancyGuard, Pausable, AccessControl {
         uint256 maxDeposit,
         uint16 earlyWithdrawPenaltyBps
     ) external onlyRole(ADMIN_ROLE) returns (uint256) {
-        // TODO: Implement ở phần chiều
-        revert("Not implemented yet");
+        // Validation
+        require(tenorDays > 0, "Tenor must be greater than 0");
+        require(aprBps > 0 && aprBps <= BPS_DENOMINATOR, "Invalid APR");
+        require(minDeposit > 0, "Min deposit must be greater than 0");
+        require(earlyWithdrawPenaltyBps <= BPS_DENOMINATOR, "Invalid penalty");
+        
+        // Check maxDeposit nếu được set
+        if (maxDeposit > 0) {
+            require(maxDeposit >= minDeposit, "Max deposit must be >= min deposit");
+        }
+        
+        // Tạo plan mới
+        uint256 planId = nextPlanId;
+        nextPlanId++;
+        
+        plans[planId] = SavingPlan({
+            planId: planId,
+            tenorDays: tenorDays,
+            aprBps: aprBps,
+            minDeposit: minDeposit,
+            maxDeposit: maxDeposit,
+            earlyWithdrawPenaltyBps: earlyWithdrawPenaltyBps,
+            enabled: true
+        });
+        
+        emit PlanCreated(planId, tenorDays, aprBps, minDeposit, maxDeposit);
+        
+        return planId;
     }
 
+    /**
+     * @dev Admin cập nhật plan hiện có
+     * @param planId ID của plan cần cập nhật
+     * @param aprBps Lãi suất năm mới
+     * @param minDeposit Số tiền gửi tối thiểu mới
+     * @param maxDeposit Số tiền gửi tối đa mới
+     * @param earlyWithdrawPenaltyBps Phạt rút sớm mới
+     */
+    function updatePlan(
+        uint256 planId,
+        uint16 aprBps,
+        uint256 minDeposit,
+        uint256 maxDeposit,
+        uint16 earlyWithdrawPenaltyBps
+    ) external onlyRole(ADMIN_ROLE) {
+        require(planId > 0 && planId < nextPlanId, "Plan does not exist");
+        
+        // Validation
+        require(aprBps > 0 && aprBps <= BPS_DENOMINATOR, "Invalid APR");
+        require(minDeposit > 0, "Min deposit must be greater than 0");
+        require(earlyWithdrawPenaltyBps <= BPS_DENOMINATOR, "Invalid penalty");
+        
+        if (maxDeposit > 0) {
+            require(maxDeposit >= minDeposit, "Max deposit must be >= min deposit");
+        }
+        
+        SavingPlan storage plan = plans[planId];
+        plan.aprBps = aprBps;
+        plan.minDeposit = minDeposit;
+        plan.maxDeposit = maxDeposit;
+        plan.earlyWithdrawPenaltyBps = earlyWithdrawPenaltyBps;
+        
+        emit PlanUpdated(planId, plan.enabled);
+    }
+
+    /**
+     * @dev Admin bật/tắt plan
+     * @param planId ID của plan
+     * @param enabled true = bật, false = tắt
+     */
+    function enablePlan(uint256 planId, bool enabled) external onlyRole(ADMIN_ROLE) {
+        require(planId > 0 && planId < nextPlanId, "Plan does not exist");
+        
+        plans[planId].enabled = enabled;
+        
+        emit PlanUpdated(planId, enabled);
+    }
+
+    /**
+     * @dev Admin tạm dừng contract (emergency)
+     */
+    function pause() external onlyRole(ADMIN_ROLE) {
+        _pause();
+    }
+
+    /**
+     * @dev Admin kích hoạt lại contract
+     */
+    function unpause() external onlyRole(ADMIN_ROLE) {
+        _unpause();
+    }
+
+    // ==================== VAULT MANAGEMENT ====================
+
+    /**
+     * @dev Admin nạp tiền vào vault để trả lãi
+     * @param amount Số lượng token nạp vào
+     */
+    function fundVault(uint256 amount) external onlyRole(ADMIN_ROLE) nonReentrant {
+        require(amount > 0, "Amount must be greater than 0");
+        
+        // Transfer token từ admin vào contract
+        require(
+            depositToken.transferFrom(msg.sender, address(this), amount),
+            "Transfer failed"
+        );
+        
+        liquidityVault += amount;
+        
+        emit VaultFunded(msg.sender, amount);
+    }
+
+    /**
+     * @dev Admin rút tiền từ vault
+     * @param amount Số lượng token rút ra
+     */
+    function withdrawVault(uint256 amount) external onlyRole(ADMIN_ROLE) nonReentrant {
+        require(amount > 0, "Amount must be greater than 0");
+        require(amount <= liquidityVault, "Insufficient vault balance");
+        
+        liquidityVault -= amount;
+        
+        // Transfer token từ contract ra admin
+        require(
+            depositToken.transfer(msg.sender, amount),
+            "Transfer failed"
+        );
+        
+        emit VaultWithdrawn(msg.sender, amount);
+    }
+
+    /**
+     * @dev Admin cập nhật địa chỉ nhận phí phạt
+     * @param newFeeReceiver Địa chỉ mới
+     */
+    function setFeeReceiver(address newFeeReceiver) external onlyRole(ADMIN_ROLE) {
+        require(newFeeReceiver != address(0), "Invalid fee receiver address");
+        feeReceiver = newFeeReceiver;
+    }
+
+    // ==================== USER FUNCTIONS (Placeholder) ====================
+    // Sẽ implement ở phần TỐI
+
+    
     /**
      * @dev [TO BE IMPLEMENTED] User mở sổ tiết kiệm
      * Sẽ implement ở phần TỐI

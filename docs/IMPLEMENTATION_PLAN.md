@@ -6,7 +6,7 @@
 - **Thứ 2 (26/1)**: ✅ HOÀN THÀNH - Setup môi trường
 - **Thứ 3 (27/1)**: 
   - ✅ **Sáng**: MockUSDC.sol + Tests (10/10 pass) + SavingsBank.sol khung sườn
-  - ⏳ **Chiều**: Chức năng quản trị + Quản lý kho tiền
+  - ✅ **Chiều**: Chức năng quản trị + VaultManager.sol + InterestCalculator.sol + Tests (98/98 pass)
   - ⏳ **Tối**: Chức năng người dùng cơ bản
 
 ---
@@ -351,16 +351,32 @@ Verify deployed contracts on Etherscan
   - [x] Thiết kế cách lưu trữ & biến trạng thái ✅
   - [x] Constructor & khởi tạo ✅
 
-**Chiều (3-4 giờ):**
-- [ ] **Chức Năng Quản Trị**
-  - [ ] createPlan() - Tạo gói tiết kiệm mới
-  - [ ] updatePlan() - Cập nhật gói tiết kiệm
-  - [ ] enablePlan() - Bật/tắt gói tiết kiệm
-  - [ ] pause()/unpause() - Điều khiển khẩn cấp
-- [ ] **Quản Lý Kho Tiền**
-  - [ ] fundVault() - Admin nạp tiền vào kho
-  - [ ] withdrawVault() - Admin rút tiền từ kho
-- [ ] **Sự Kiện Cơ Bản** - PlanCreated, VaultFunded, v.v.
+**Chiều (3-4 giờ):** ✅ **HOÀN THÀNH**
+- [x] **Chức Năng Quản Trị**
+  - [x] createPlan() - Tạo gói tiết kiệm mới ✅
+  - [x] updatePlan() - Cập nhật gói tiết kiệm ✅
+  - [x] enablePlan() - Bật/tắt gói tiết kiệm ✅
+  - [x] pause()/unpause() - Điều khiển khẩn cấp ✅
+- [x] **Quản Lý Kho Tiền**
+  - [x] fundVault() - Admin nạp tiền vào kho ✅
+  - [x] withdrawVault() - Admin rút tiền từ kho ✅
+- [x] **Sự Kiện Cơ Bản** - PlanCreated, VaultFunded, v.v. ✅
+- [x] **BONUS: VaultManager.sol** - Separation of concerns
+  - [x] Quản lý vault balance independently
+  - [x] Reserve/Release funds tracking
+  - [x] Vault health monitoring (min ratio: 120%)
+  - [x] SafeERC20 integration
+- [x] **BONUS: InterestCalculator.sol** - Reusable library
+  - [x] Simple interest calculations
+  - [x] Early withdraw interest (pro-rata)
+  - [x] Penalty calculations
+  - [x] Maturity amount estimations
+  - [x] Validation helpers
+- [x] **Comprehensive Tests**
+  - [x] MockUSDC.test.ts (10 test cases) ✅
+  - [x] VaultManager.test.ts (57 test cases) ✅
+  - [x] InterestCalculator.test.ts (31 test cases) ✅
+  - [x] **TOTAL: 98/98 tests passing** ✅
 
 **Tối (2-3 giờ):**
 - [ ] **Chức Năng Người Dùng Cơ Bản**
@@ -457,10 +473,13 @@ Verify deployed contracts on Etherscan
 
 ## 📊 Tiến Độ Tổng Quan
 
-- **Thứ 2**: ✅ Hoàn thành
-- **Thứ 3**: 🔄 Đang thực hiện (Sáng: ✅ Hoàn thành | Chiều: ⏳ | Tối: ⏳)
-- **Thứ 4**: ⏳ Chưa bắt đầu
-- **Thứ 5**: ⏳ Chưa bắt đầu
+- **Thứ 2**: ✅ Hoàn thành - Setup môi trường
+- **Thứ 3**: 🔄 Đang thực hiện
+  - ✅ **Sáng**: MockUSDC.sol + Tests (10 pass)
+  - ✅ **Chiều**: Admin functions + VaultManager + InterestCalculator (88 tests pass)
+  - ⏳ **Tối**: User functions (openDeposit, withdraw)
+- **Thứ 4**: ⏳ Chưa bắt đầu - ERC721 + Advanced features
+- **Thứ 5**: ⏳ Chưa bắt đầu - Security + Deployment
 
 ---
 

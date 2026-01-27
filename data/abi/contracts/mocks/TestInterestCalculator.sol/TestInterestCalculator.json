@@ -1,0 +1,326 @@
+[
+    {
+        "inputs": [
+            {
+                "internalType": "uint16",
+                "name": "aprBps",
+                "type": "uint16"
+            }
+        ],
+        "name": "calculateAPY",
+        "outputs": [
+            {
+                "internalType": "uint16",
+                "name": "",
+                "type": "uint16"
+            }
+        ],
+        "stateMutability": "pure",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "principal",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint16",
+                "name": "aprBps",
+                "type": "uint16"
+            },
+            {
+                "internalType": "uint256",
+                "name": "startAt",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "withdrawAt",
+                "type": "uint256"
+            }
+        ],
+        "name": "calculateEarlyWithdrawInterest",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "interest",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "timeElapsed",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "pure",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "principal",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint16",
+                "name": "aprBps",
+                "type": "uint16"
+            },
+            {
+                "internalType": "uint256",
+                "name": "startAt",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "maturityAt",
+                "type": "uint256"
+            }
+        ],
+        "name": "calculateInterestForDeposit",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "interest",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "timeElapsed",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "pure",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "principal",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint16",
+                "name": "penaltyBps",
+                "type": "uint16"
+            }
+        ],
+        "name": "calculatePenalty",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "pure",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "principal",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint16",
+                "name": "aprBps",
+                "type": "uint16"
+            },
+            {
+                "internalType": "uint256",
+                "name": "durationSeconds",
+                "type": "uint256"
+            }
+        ],
+        "name": "calculateSimpleInterest",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "pure",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "principal",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint16",
+                "name": "aprBps",
+                "type": "uint16"
+            },
+            {
+                "internalType": "uint32",
+                "name": "tenorDays",
+                "type": "uint32"
+            }
+        ],
+        "name": "calculateTotalInterestForReserve",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "pure",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "principal",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint16",
+                "name": "aprBps",
+                "type": "uint16"
+            },
+            {
+                "internalType": "uint16",
+                "name": "penaltyBps",
+                "type": "uint16"
+            },
+            {
+                "internalType": "uint32",
+                "name": "daysElapsed",
+                "type": "uint32"
+            }
+        ],
+        "name": "estimateEarlyWithdrawAmount",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "netAmount",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "proRataInterest",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "penalty",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "pure",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "principal",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint16",
+                "name": "aprBps",
+                "type": "uint16"
+            },
+            {
+                "internalType": "uint32",
+                "name": "tenorDays",
+                "type": "uint32"
+            }
+        ],
+        "name": "estimateMaturityAmount",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "totalAmount",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "interest",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "pure",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint16",
+                "name": "aprBps",
+                "type": "uint16"
+            }
+        ],
+        "name": "isValidAPR",
+        "outputs": [
+            {
+                "internalType": "bool",
+                "name": "",
+                "type": "bool"
+            }
+        ],
+        "stateMutability": "pure",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint16",
+                "name": "penaltyBps",
+                "type": "uint16"
+            }
+        ],
+        "name": "isValidPenalty",
+        "outputs": [
+            {
+                "internalType": "bool",
+                "name": "",
+                "type": "bool"
+            }
+        ],
+        "stateMutability": "pure",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint32",
+                "name": "tenorDays",
+                "type": "uint32"
+            },
+            {
+                "internalType": "uint32",
+                "name": "minDays",
+                "type": "uint32"
+            },
+            {
+                "internalType": "uint32",
+                "name": "maxDays",
+                "type": "uint32"
+            }
+        ],
+        "name": "isValidTenor",
+        "outputs": [
+            {
+                "internalType": "bool",
+                "name": "",
+                "type": "bool"
+            }
+        ],
+        "stateMutability": "pure",
+        "type": "function"
+    }
+]
