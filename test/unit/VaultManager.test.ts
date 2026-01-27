@@ -1,6 +1,6 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import { VaultManager, MockUSDC } from "../../typechain-types";
+import { VaultManager, MockUSDC } from "../../typechain";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 
 describe("VaultManager", function () {

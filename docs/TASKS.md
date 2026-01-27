@@ -48,11 +48,14 @@
   - [x] MockUSDC.test.ts (10 test cases) ✅
   - [x] **TOTAL: 98/98 tests passing** ✅
 
-**Tối (2-3 giờ):**
-- [ ] **Chức Năng Người Dùng Cơ Bản**
-  - [ ] openDeposit() - Mở sổ tiết kiệm
-  - [ ] calculateInterest() - Hàm tính lãi (lãi đơn)
-  - [ ] withdraw() - Rút tiền đúng hạn (gốc + lãi)
+**Tối (2-3 giờ):** ✅ **HOÀN THÀNH**
+- [x] **Chức Năng Người Dùng Cơ Bản**
+  - [x] openDeposit() - Mở sổ tiết kiệm ✅
+  - [x] calculateInterest() - Hàm tính lãi (lãi đơn) ✅
+  - [x] withdraw() - Rút tiền đúng hạn (gốc + lãi) ✅
+- [x] **Tests**
+  - [x] SavingsBank.test.ts (37 test cases) ✅
+  - [x] **TOTAL: 135/135 tests passing** ✅
 
 ## 🔨 Thứ 4 (28/1) - Hoàn Thiện Tính Năng + Kiểm Thử
 
@@ -138,10 +141,11 @@
 ## 📊 Tiến Độ Tổng Quan
 
 - **Thứ 2**: ✅ Hoàn thành
-- **Thứ 3**: 🔄 Đang thực hiện
-  - ✅ **Sáng (3-4 giờ)**: HOÀN THÀNH - MockUSDC.sol + Tests (10/10 pass) + SavingsBank.sol khung sườn
-  - ✅ **Chiều (3-4 giờ)**: HOÀN THÀNH - Chức năng quản trị + Quản lý kho tiền + VaultManager + InterestCalculator + Tests (98/98 pass)
-  - ⏳ **Tối (2-3 giờ)**: Chưa bắt đầu - Chức năng người dùng cơ bản
+- **Thứ 3**: ✅ **HOÀN THÀNH**
+  - ✅ **Sáng (3-4 giờ)**: MockUSDC.sol + Tests (10/10 pass) + SavingsBank.sol khung sườn
+  - ✅ **Chiều (3-4 giờ)**: Chức năng quản trị + VaultManager + InterestCalculator + Tests (88 tests pass)
+  - ✅ **Tối (2-3 giờ)**: Chức năng người dùng + SavingsBank tests (37 tests pass)
+  - ✅ **TỔNG: 135/135 tests passing**
 - **Thứ 4**: ⏳ Chưa bắt đầu
 - **Thứ 5**: ⏳ Chưa bắt đầu
 

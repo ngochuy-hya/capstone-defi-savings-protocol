@@ -97,7 +97,7 @@ contract VaultManager is Ownable, ReentrancyGuard, Pausable {
         minHealthRatioBps = _minHealthRatioBps;
     }
 
-    // ==================== MODIFIERS ====================
+    // MODIFIERS 
 
     /**
      * @dev Chỉ SavingsBank contract mới được gọi
@@ -107,7 +107,7 @@ contract VaultManager is Ownable, ReentrancyGuard, Pausable {
         _;
     }
 
-    // ==================== OWNER FUNCTIONS ====================
+    // OWNER FUNCTIONS 
 
     /**
      * @dev Owner set địa chỉ SavingsBank contract (chỉ set 1 lần)
@@ -196,7 +196,7 @@ contract VaultManager is Ownable, ReentrancyGuard, Pausable {
         _unpause();
     }
 
-    // ==================== SAVINGS BANK FUNCTIONS ====================
+    // SAVINGS BANK FUNCTIONS
 
     /**
      * @dev SavingsBank gọi để reserve funds khi user mở deposit

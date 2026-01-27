@@ -4,10 +4,11 @@
 
 ## 🎯 Tiến Độ Hiện Tại
 - **Thứ 2 (26/1)**: ✅ HOÀN THÀNH - Setup môi trường
-- **Thứ 3 (27/1)**: 
-  - ✅ **Sáng**: MockUSDC.sol + Tests (10/10 pass) + SavingsBank.sol khung sườn
-  - ✅ **Chiều**: Chức năng quản trị + VaultManager.sol + InterestCalculator.sol + Tests (98/98 pass)
-  - ⏳ **Tối**: Chức năng người dùng cơ bản
+- **Thứ 3 (27/1)**: ✅ **HOÀN THÀNH**
+  - ✅ **Sáng**: MockUSDC.sol + Tests (10 pass) + SavingsBank.sol khung sườn
+  - ✅ **Chiều**: Chức năng quản trị + VaultManager.sol + InterestCalculator.sol + Tests (88 pass)
+  - ✅ **Tối**: User functions (openDeposit, calculateInterest, withdraw) + Tests (37 pass)
+  - ✅ **TOTAL: 135/135 tests passing**
 
 ---
 
@@ -378,11 +379,18 @@ Verify deployed contracts on Etherscan
   - [x] InterestCalculator.test.ts (31 test cases) ✅
   - [x] **TOTAL: 98/98 tests passing** ✅
 
-**Tối (2-3 giờ):**
-- [ ] **Chức Năng Người Dùng Cơ Bản**
-  - [ ] openDeposit() - Mở sổ tiết kiệm
-  - [ ] calculateInterest() - Hàm tính lãi (lãi đơn)
-  - [ ] withdraw() - Rút tiền đúng hạn (gốc + lãi)
+**Tối (2-3 giờ):** ✅ **HOÀN THÀNH**
+- [x] **Chức Năng Người Dùng Cơ Bản**
+  - [x] openDeposit() - Mở sổ tiết kiệm ✅
+  - [x] calculateInterest() - Hàm tính lãi (lãi đơn) ✅
+  - [x] withdraw() - Rút tiền đúng hạn (gốc + lãi) ✅
+- [x] **Comprehensive Tests**
+  - [x] SavingsBank.test.ts (37 test cases) ✅
+    - openDeposit() tests (13 cases)
+    - calculateInterest() tests (8 cases)
+    - withdraw() tests (14 cases)
+    - Integration tests (2 cases)
+  - [x] **TOTAL: 135/135 tests passing** ✅
 
 ---
 
@@ -474,10 +482,11 @@ Verify deployed contracts on Etherscan
 ## 📊 Tiến Độ Tổng Quan
 
 - **Thứ 2**: ✅ Hoàn thành - Setup môi trường
-- **Thứ 3**: 🔄 Đang thực hiện
-  - ✅ **Sáng**: MockUSDC.sol + Tests (10 pass)
-  - ✅ **Chiều**: Admin functions + VaultManager + InterestCalculator (88 tests pass)
-  - ⏳ **Tối**: User functions (openDeposit, withdraw)
+- **Thứ 3**: ✅ **HOÀN THÀNH** 
+  - ✅ **Sáng**: MockUSDC + skeleton (10 tests)
+  - ✅ **Chiều**: Admin functions + VaultManager + InterestCalculator (88 tests)
+  - ✅ **Tối**: User functions (openDeposit, withdraw, calculateInterest) + Tests (37 tests)
+  - 📊 **Total: 135/135 tests passing**
 - **Thứ 4**: ⏳ Chưa bắt đầu - ERC721 + Advanced features
 - **Thứ 5**: ⏳ Chưa bắt đầu - Security + Deployment
 

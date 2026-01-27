@@ -5,6 +5,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
+import "./libraries/InterestCalculator.sol";
 
 /**
  * @title SavingsBank
@@ -362,42 +363,204 @@ contract SavingsBank is ReentrancyGuard, Pausable, AccessControl {
         feeReceiver = newFeeReceiver;
     }
 
-    // ==================== USER FUNCTIONS (Placeholder) ====================
-    // Sẽ implement ở phần TỐI
+    // ==================== USER FUNCTIONS ====================
 
-    
     /**
-     * @dev [TO BE IMPLEMENTED] User mở sổ tiết kiệm
-     * Sẽ implement ở phần TỐI
+     * @dev User mở sổ tiết kiệm mới
+     * @param planId ID của plan muốn tham gia
+     * @param amount Số tiền gửi (USDC with 6 decimals)
+     * @return depositId ID của sổ tiết kiệm mới
+     * 
+     * @notice Flow:
+     * 1. Validate plan exists và enabled
+     * 2. Check amount nằm trong [minDeposit, maxDeposit]
+     * 3. Transfer USDC từ user vào contract
+     * 4. Tạo DepositCertificate mới
+     * 5. Lưu vào userDeposits mapping
+     * 6. Emit DepositOpened event
+     * 
+     * Requirements:
+     * - Contract không bị pause
+     * - Plan phải enabled
+     * - Amount phải >= minDeposit
+     * - Amount phải <= maxDeposit (nếu có giới hạn)
+     * - User phải approve USDC trước
      */
     function openDeposit(
         uint256 planId,
         uint256 amount
-    ) external whenNotPaused nonReentrant returns (uint256) {
-        // TODO: Implement ở phần tối
-        revert("Not implemented yet");
+    ) 
+        external 
+        whenNotPaused 
+        nonReentrant 
+        planExists(planId) 
+        returns (uint256) 
+    {
+        SavingPlan memory plan = plans[planId];
+        
+        // Validate amount
+        require(amount >= plan.minDeposit, "Amount below minimum deposit");
+        if (plan.maxDeposit > 0) {
+            require(amount <= plan.maxDeposit, "Amount exceeds maximum deposit");
+        }
+        
+        // Transfer USDC từ user vào contract
+        // User phải approve trước khi gọi function này
+        require(
+            depositToken.transferFrom(msg.sender, address(this), amount),
+            "Transfer failed"
+        );
+        
+        // Tạo deposit certificate mới
+        uint256 depositId = nextDepositId;
+        nextDepositId++;
+        
+        // Tính maturity time
+        uint256 maturityAt = block.timestamp + (uint256(plan.tenorDays) * 1 days);
+        
+        // Lưu deposit certificate
+        deposits[depositId] = DepositCertificate({
+            depositId: depositId,
+            owner: msg.sender,
+            planId: planId,
+            principal: amount,
+            startAt: block.timestamp,
+            maturityAt: maturityAt,
+            status: DepositStatus.ACTIVE
+        });
+        
+        // Thêm vào danh sách deposits của user
+        userDeposits[msg.sender].push(depositId);
+        
+        emit DepositOpened(depositId, msg.sender, planId, amount, maturityAt);
+        
+        return depositId;
     }
 
     /**
-     * @dev [TO BE IMPLEMENTED] Tính lãi
-     * Sẽ implement ở phần TỐI
+     * @dev Tính lãi cho deposit certificate
+     * @param depositId ID của sổ tiết kiệm
+     * @return interest Số tiền lãi user sẽ nhận được
+     * 
+     * @notice Tính lãi theo simple interest formula:
+     * interest = principal × aprBps × duration / (365 days × 10000)
+     * 
+     * @notice Hàm này tính lãi tại thời điểm hiện tại:
+     * - Nếu chưa đáo hạn: tính lãi từ startAt → now
+     * - Nếu đã đáo hạn: tính lãi từ startAt → maturityAt (full term)
+     * 
+     * Example:
+     * - Principal: 10,000 USDC (10,000 * 10^6)
+     * - APR: 8% = 800 basis points
+     * - Tenor: 90 days
+     * - Interest ≈ 197.26 USDC
      */
     function calculateInterest(
         uint256 depositId
-    ) public view returns (uint256) {
-        // TODO: Implement ở phần tối
-        revert("Not implemented yet");
+    ) 
+        public 
+        view 
+        depositExists(depositId) 
+        returns (uint256) 
+    {
+        DepositCertificate memory cert = deposits[depositId];
+        
+        // Chỉ tính lãi cho deposit đang ACTIVE
+        require(cert.status == DepositStatus.ACTIVE, "Deposit not active");
+        
+        SavingPlan memory plan = plans[cert.planId];
+        
+        // Tính thời gian: từ startAt đến min(now, maturityAt)
+        uint256 endTime = block.timestamp < cert.maturityAt 
+            ? block.timestamp 
+            : cert.maturityAt;
+        
+        uint256 durationSeconds = endTime - cert.startAt;
+        
+        // Nếu không có thời gian trôi qua, trả về 0
+        if (durationSeconds == 0) {
+            return 0;
+        }
+        
+        // Sử dụng InterestCalculator library để tính lãi
+        uint256 interest = InterestCalculator.calculateSimpleInterest(
+            cert.principal,
+            plan.aprBps,
+            durationSeconds
+        );
+        
+        return interest;
     }
 
     /**
-     * @dev [TO BE IMPLEMENTED] Rút tiền đúng hạn
-     * Sẽ implement ở phần TỐI
+     * @dev User rút tiền khi đáo hạn
+     * @param depositId ID của sổ tiết kiệm
+     * 
+     * @notice Flow:
+     * 1. Validate deposit exists và đang ACTIVE
+     * 2. Check msg.sender là owner
+     * 3. Check đã đến maturityAt
+     * 4. Tính lãi (simple interest)
+     * 5. Check vault đủ tiền trả lãi
+     * 6. Transfer principal + interest cho user
+     * 7. Update deposit status = WITHDRAWN
+     * 8. Emit Withdrawn event
+     * 
+     * Requirements:
+     * - Contract không bị pause
+     * - Deposit đang ACTIVE
+     * - Msg.sender là owner
+     * - block.timestamp >= maturityAt
+     * - Vault đủ liquidity để trả lãi
+     * 
+     * @notice User nhận: principal + full interest
      */
     function withdraw(
         uint256 depositId
-    ) external whenNotPaused nonReentrant {
-        // TODO: Implement ở phần tối
-        revert("Not implemented yet");
+    ) 
+        external 
+        whenNotPaused 
+        nonReentrant 
+        depositExists(depositId)
+        onlyDepositOwner(depositId)
+    {
+        DepositCertificate storage cert = deposits[depositId];
+        
+        // Validate deposit status
+        require(cert.status == DepositStatus.ACTIVE, "Deposit not active");
+        
+        // Check đã đến maturity
+        require(block.timestamp >= cert.maturityAt, "Not yet matured");
+        
+        // Tính lãi đầy đủ (từ startAt → maturityAt)
+        SavingPlan memory plan = plans[cert.planId];
+        uint256 durationSeconds = cert.maturityAt - cert.startAt;
+        
+        uint256 interest = InterestCalculator.calculateSimpleInterest(
+            cert.principal,
+            plan.aprBps,
+            durationSeconds
+        );
+        
+        // Check vault đủ tiền trả lãi
+        require(liquidityVault >= interest, "Insufficient vault liquidity");
+        
+        // Trừ lãi từ vault
+        liquidityVault -= interest;
+        
+        // Update deposit status
+        cert.status = DepositStatus.WITHDRAWN;
+        
+        // Tính tổng tiền trả cho user
+        uint256 totalAmount = cert.principal + interest;
+        
+        // Transfer principal + interest cho user
+        require(
+            depositToken.transfer(msg.sender, totalAmount),
+            "Transfer failed"
+        );
+        
+        emit Withdrawn(depositId, msg.sender, cert.principal, interest, false);
     }
 
     // View Functions
