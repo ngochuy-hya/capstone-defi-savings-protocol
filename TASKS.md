@@ -12,15 +12,15 @@
 ## 📝 Thứ 3 (27/1) - Phát Triển Smart Contract Chính
 
 **Sáng (3-4 giờ):**
-- [ ] **MockUSDC.sol** - Token ERC20 với 6 decimals (30 phút)
-- [ ] Test MockUSDC (5 phút)
-  - [ ] Verify 6 decimals
-  - [ ] Verify mint/burn works
-- [ ] **SavingsBank.sol** thiết lập khung sườn
-  - [ ] Struct SavingPlan (kế hoạch tiết kiệm)
-  - [ ] Struct DepositCertificate & enum (sổ tiết kiệm)
-  - [ ] Thiết kế cách lưu trữ & biến trạng thái
-  - [ ] Constructor & khởi tạo
+- [x] **MockUSDC.sol** - Token ERC20 với 6 decimals (30 phút)
+- [x] Test MockUSDC (5 phút)
+  - [x] Verify 6 decimals
+  - [x] Verify mint/burn works
+- [x] **SavingsBank.sol** thiết lập khung sườn
+  - [x] Struct SavingPlan (kế hoạch tiết kiệm)
+  - [x] Struct DepositCertificate & enum (sổ tiết kiệm)
+  - [x] Thiết kế cách lưu trữ & biến trạng thái
+  - [x] Constructor & khởi tạo
 
 **Chiều (3-4 giờ):**
 - [ ] **Chức Năng Quản Trị**
@@ -124,6 +124,9 @@
 
 - **Thứ 2**: ✅ Hoàn thành
 - **Thứ 3**: 🔄 Đang thực hiện
+  - ✅ **Sáng (3-4 giờ)**: HOÀN THÀNH - MockUSDC.sol + Tests (10/10 pass) + SavingsBank.sol khung sườn
+  - ⏳ **Chiều (3-4 giờ)**: Chưa bắt đầu - Chức năng quản trị + Quản lý kho tiền
+  - ⏳ **Tối (2-3 giờ)**: Chưa bắt đầu - Chức năng người dùng cơ bản
 - **Thứ 4**: ⏳ Chưa bắt đầu
 - **Thứ 5**: ⏳ Chưa bắt đầu
 
