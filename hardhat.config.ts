@@ -26,7 +26,7 @@ task("accounts", "Prints the list of accounts", async (_taskArgs: {}, hre) => {
 const {
   TESTNET_PRIVATE_KEY: testnetPrivateKey,
   MAINNET_PRIVATE_KEY: mainnetPrivateKey,
-  ETHERSCAN_API: etherscanApiKey,
+  ETHERSCAN_API_KEY: etherscanApiKey,
 } = process.env;
 const reportGas = process.env.REPORT_GAS;
 

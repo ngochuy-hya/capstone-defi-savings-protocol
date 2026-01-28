@@ -8,6 +8,11 @@
             },
             {
                 "internalType": "address",
+                "name": "_vaultManager",
+                "type": "address"
+            },
+            {
+                "internalType": "address",
                 "name": "_feeReceiver",
                 "type": "address"
             },
@@ -178,6 +183,17 @@
     {
         "inputs": [],
         "name": "ReentrancyGuardReentrantCall",
+        "type": "error"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "address",
+                "name": "token",
+                "type": "address"
+            }
+        ],
+        "name": "SafeERC20FailedOperation",
         "type": "error"
     },
     {
@@ -869,16 +885,53 @@
         "type": "function"
     },
     {
-        "inputs": [
+        "inputs": [],
+        "name": "getAllPlans",
+        "outputs": [
             {
-                "internalType": "uint256",
-                "name": "amount",
-                "type": "uint256"
+                "components": [
+                    {
+                        "internalType": "uint256",
+                        "name": "planId",
+                        "type": "uint256"
+                    },
+                    {
+                        "internalType": "uint32",
+                        "name": "tenorDays",
+                        "type": "uint32"
+                    },
+                    {
+                        "internalType": "uint16",
+                        "name": "aprBps",
+                        "type": "uint16"
+                    },
+                    {
+                        "internalType": "uint256",
+                        "name": "minDeposit",
+                        "type": "uint256"
+                    },
+                    {
+                        "internalType": "uint256",
+                        "name": "maxDeposit",
+                        "type": "uint256"
+                    },
+                    {
+                        "internalType": "uint16",
+                        "name": "earlyWithdrawPenaltyBps",
+                        "type": "uint16"
+                    },
+                    {
+                        "internalType": "bool",
+                        "name": "enabled",
+                        "type": "bool"
+                    }
+                ],
+                "internalType": "struct SavingsBank.SavingPlan[]",
+                "name": "",
+                "type": "tuple[]"
             }
         ],
-        "name": "fundVault",
-        "outputs": [],
-        "stateMutability": "nonpayable",
+        "stateMutability": "view",
         "type": "function"
     },
     {
@@ -895,6 +948,39 @@
                 "internalType": "address",
                 "name": "",
                 "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [],
+        "name": "getContractSummary",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "principalHeld",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "vaultTotal",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "vaultReserved",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "vaultAvailable",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "totalDeposits",
+                "type": "uint256"
             }
         ],
         "stateMutability": "view",
@@ -1042,6 +1128,19 @@
         "type": "function"
     },
     {
+        "inputs": [],
+        "name": "getTotalPrincipalHeld",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
         "inputs": [
             {
                 "internalType": "address",
@@ -1062,11 +1161,21 @@
     },
     {
         "inputs": [],
-        "name": "getVaultBalance",
+        "name": "getVaultInfo",
         "outputs": [
             {
                 "internalType": "uint256",
-                "name": "",
+                "name": "totalBalance",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "reservedFunds",
+                "type": "uint256"
+            },
+            {
+                "internalType": "uint256",
+                "name": "availableFunds",
                 "type": "uint256"
             }
         ],
@@ -1134,19 +1243,6 @@
                 "internalType": "bool",
                 "name": "",
                 "type": "bool"
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [],
-        "name": "liquidityVault",
-        "outputs": [
-            {
-                "internalType": "uint256",
-                "name": "",
-                "type": "uint256"
             }
         ],
         "stateMutability": "view",
@@ -1663,6 +1759,19 @@
         "type": "function"
     },
     {
+        "inputs": [],
+        "name": "vaultManager",
+        "outputs": [
+            {
+                "internalType": "contract IVaultManager",
+                "name": "",
+                "type": "address"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
         "inputs": [
             {
                 "internalType": "uint256",
@@ -1671,19 +1780,6 @@
             }
         ],
         "name": "withdraw",
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function"
-    },
-    {
-        "inputs": [
-            {
-                "internalType": "uint256",
-                "name": "amount",
-                "type": "uint256"
-            }
-        ],
-        "name": "withdrawVault",
         "outputs": [],
         "stateMutability": "nonpayable",
         "type": "function"

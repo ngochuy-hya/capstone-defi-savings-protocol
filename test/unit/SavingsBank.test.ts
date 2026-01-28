@@ -1,11 +1,12 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
-import { MockUSDC, SavingsBank } from "../../typechain";
+import { MockUSDC, SavingsBank, VaultManager } from "../../typechain";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 
 describe("SavingsBank - User Functions", function () {
   let savingsBank: SavingsBank;
+  let vaultManager: VaultManager;
   let mockUSDC: MockUSDC;
   let owner: SignerWithAddress;
   let admin: SignerWithAddress;
@@ -49,22 +50,34 @@ describe("SavingsBank - User Functions", function () {
     const MockUSDCFactory = await ethers.getContractFactory("MockUSDC");
     mockUSDC = await MockUSDCFactory.deploy();
 
+    // Deploy VaultManager
+    const VaultManagerFactory = await ethers.getContractFactory("VaultManager");
+    vaultManager = await VaultManagerFactory.deploy(
+      await mockUSDC.getAddress(),
+      feeReceiver.address,
+      12000 // 120% min health ratio
+    );
+
     // Deploy SavingsBank
     const SavingsBankFactory = await ethers.getContractFactory("SavingsBank");
     savingsBank = await SavingsBankFactory.deploy(
       await mockUSDC.getAddress(),
+      await vaultManager.getAddress(),
       feeReceiver.address,
       admin.address
     );
+
+    // Link VaultManager to SavingsBank
+    await vaultManager.setSavingsBank(await savingsBank.getAddress());
 
     // Mint USDC for users
     await mockUSDC.mint(user1.address, ethers.parseUnits("100000", 6)); // 100k USDC
     await mockUSDC.mint(user2.address, ethers.parseUnits("100000", 6)); // 100k USDC
 
-    // Admin funds vault
-    await mockUSDC.mint(admin.address, ethers.parseUnits("500000", 6)); // 500k USDC
-    await mockUSDC.connect(admin).approve(await savingsBank.getAddress(), ethers.MaxUint256);
-    await savingsBank.connect(admin).fundVault(ethers.parseUnits("500000", 6));
+    // Admin funds vault via VaultManager
+    await mockUSDC.mint(owner.address, ethers.parseUnits("500000", 6)); // 500k USDC
+    await mockUSDC.connect(owner).approve(await vaultManager.getAddress(), ethers.MaxUint256);
+    await vaultManager.fundVault(ethers.parseUnits("500000", 6));
 
     // Create saving plans
     await savingsBank.connect(admin).createPlan(
@@ -91,7 +104,7 @@ describe("SavingsBank - User Functions", function () {
       PLAN_90_DAYS.penaltyBps
     );
 
-    // Users approve USDC
+    // METHOD 2: Users approve USDC to SavingsBank (principal held here)
     await mockUSDC.connect(user1).approve(await savingsBank.getAddress(), ethers.MaxUint256);
     await mockUSDC.connect(user2).approve(await savingsBank.getAddress(), ethers.MaxUint256);
   });
@@ -103,7 +116,8 @@ describe("SavingsBank - User Functions", function () {
         const planId = 1; // 7-day plan
 
         const userBalanceBefore = await mockUSDC.balanceOf(user1.address);
-        const contractBalanceBefore = await mockUSDC.balanceOf(await savingsBank.getAddress());
+        const savingsBankBalanceBefore = await mockUSDC.balanceOf(await savingsBank.getAddress());
+        const vaultReservesBefore = await vaultManager.reservedFunds();
 
         const tx = await savingsBank.connect(user1).openDeposit(planId, depositAmount, false);
         const receipt = await tx.wait();
@@ -118,12 +132,21 @@ describe("SavingsBank - User Functions", function () {
         });
         expect(event).to.not.be.undefined;
 
-        // Check balances
+        // METHOD 2: Check balances (Principal goes to SavingsBank, only interest reserved in VaultManager)
         const userBalanceAfter = await mockUSDC.balanceOf(user1.address);
-        const contractBalanceAfter = await mockUSDC.balanceOf(await savingsBank.getAddress());
+        const savingsBankBalanceAfter = await mockUSDC.balanceOf(await savingsBank.getAddress());
+        const vaultReservesAfter = await vaultManager.reservedFunds();
 
+        // User balance decreased by principal
         expect(userBalanceAfter).to.equal(userBalanceBefore - depositAmount);
-        expect(contractBalanceAfter).to.equal(contractBalanceBefore + depositAmount);
+        
+        // SavingsBank balance increased by principal (holds user funds)
+        expect(savingsBankBalanceAfter).to.equal(savingsBankBalanceBefore + depositAmount);
+        
+        // VaultManager reserves increased by expected interest only
+        // 1000 USDC * 5% APR * 7 days / 365 days ≈ 0.958904 USDC
+        const expectedInterest = (depositAmount * BigInt(PLAN_7_DAYS.aprBps) * BigInt(PLAN_7_DAYS.tenorDays) * BigInt(86400)) / (SECONDS_PER_YEAR * BPS_DENOMINATOR);
+        expect(vaultReservesAfter).to.equal(vaultReservesBefore + expectedInterest);
 
         // Check deposit certificate
         const deposit = await savingsBank.getDeposit(1);
@@ -231,11 +254,14 @@ describe("SavingsBank - User Functions", function () {
       });
 
       it("Should revert if user hasn't approved USDC", async function () {
-        const [newUser] = await ethers.getSigners();
+        const signers = await ethers.getSigners();
+        const newUser = signers[5]; // Get a new unused signer
         await mockUSDC.mint(newUser.address, ethers.parseUnits("10000", 6));
 
-        // Don't approve
-        await expect(savingsBank.connect(newUser).openDeposit(1, ethers.parseUnits("1000", 6), false)).to.be.reverted;
+        // Don't approve - should revert with ERC20InsufficientAllowance
+        await expect(
+          savingsBank.connect(newUser).openDeposit(1, ethers.parseUnits("1000", 6), false)
+        ).to.be.revertedWithCustomError(mockUSDC, "ERC20InsufficientAllowance");
       });
 
       it("Should revert when contract is paused", async function () {
@@ -342,23 +368,33 @@ describe("SavingsBank - User Functions", function () {
         await time.increase(30 * 24 * 60 * 60);
 
         const userBalanceBefore = await mockUSDC.balanceOf(user1.address);
-        const vaultBalanceBefore = await savingsBank.getVaultBalance();
+        const savingsBankBalanceBefore = await mockUSDC.balanceOf(await savingsBank.getAddress());
+        const vaultBalanceBefore = await vaultManager.totalBalance();
+        const vaultReservesBefore = await vaultManager.reservedFunds();
 
         await savingsBank.connect(user1).withdraw(1);
 
         const userBalanceAfter = await mockUSDC.balanceOf(user1.address);
-        const vaultBalanceAfter = await savingsBank.getVaultBalance();
+        const savingsBankBalanceAfter = await mockUSDC.balanceOf(await savingsBank.getAddress());
+        const vaultBalanceAfter = await vaultManager.totalBalance();
+        const vaultReservesAfter = await vaultManager.reservedFunds();
 
         // Calculate expected interest: 10,000 * 0.08 * (30/365) ≈ 65.75 USDC
         const expectedInterest =
           (10_000_000_000n * 800n * 30n * 24n * 60n * 60n) / (SECONDS_PER_YEAR * BPS_DENOMINATOR);
 
-        // User should receive principal + interest
+        // METHOD 2: User should receive principal + interest
         const expectedTotal = depositAmount + expectedInterest;
         expect(userBalanceAfter - userBalanceBefore).to.be.closeTo(expectedTotal, ethers.parseUnits("0.1", 6));
 
-        // Vault should decrease by interest amount
+        // METHOD 2: SavingsBank balance should decrease by principal only
+        expect(savingsBankBalanceBefore - savingsBankBalanceAfter).to.equal(depositAmount);
+
+        // METHOD 2: VaultManager balance should decrease by interest only (not principal)
         expect(vaultBalanceBefore - vaultBalanceAfter).to.be.closeTo(expectedInterest, ethers.parseUnits("0.1", 6));
+
+        // METHOD 2: Reserved funds should be released
+        expect(vaultReservesBefore - vaultReservesAfter).to.be.closeTo(expectedInterest, ethers.parseUnits("0.1", 6));
 
         // Deposit should be marked as WITHDRAWN
         const deposit = await savingsBank.getDeposit(1);
@@ -463,14 +499,24 @@ describe("SavingsBank - User Functions", function () {
         await expect(savingsBank.connect(user1).withdraw(1)).to.be.revertedWith("Deposit not active");
       });
 
-      it("Should revert if vault has insufficient liquidity", async function () {
-        // Drain vault
-        const vaultBalance = await savingsBank.getVaultBalance();
-        await savingsBank.connect(admin).withdrawVault(vaultBalance);
+      it("Should succeed even when available funds are drained (reserves protected)", async function () {
+        // METHOD 2: This test verifies that reserved funds are protected
+        // Even if we drain all available funds, withdrawals still work because
+        // interest is already reserved
+        
+        const availableFunds = await vaultManager.getAvailableFunds();
+        if (availableFunds > 0) {
+          await vaultManager.withdrawVault(availableFunds);
+        }
 
         await time.increase(30 * 24 * 60 * 60);
 
-        await expect(savingsBank.connect(user1).withdraw(1)).to.be.revertedWith("Insufficient vault liquidity");
+        // Should succeed because interest is reserved (not in available funds)
+        await expect(savingsBank.connect(user1).withdraw(1)).to.not.be.reverted;
+        
+        // Verify deposit was withdrawn
+        const deposit = await savingsBank.getDeposit(1);
+        expect(deposit.status).to.equal(1); // WITHDRAWN
       });
 
       it("Should revert when contract is paused", async function () {
@@ -790,13 +836,17 @@ describe("SavingsBank - User Functions", function () {
 
         const userBalanceBefore = await mockUSDC.balanceOf(user1.address);
         const feeReceiverBalanceBefore = await mockUSDC.balanceOf(feeReceiver.address);
-        const vaultBalanceBefore = await savingsBank.getVaultBalance();
+        const savingsBankBalanceBefore = await mockUSDC.balanceOf(await savingsBank.getAddress());
+        const vaultBalanceBefore = await vaultManager.totalBalance();
+        const vaultReservesBefore = await vaultManager.reservedFunds();
 
         await savingsBank.connect(user1).earlyWithdraw(1);
 
         const userBalanceAfter = await mockUSDC.balanceOf(user1.address);
         const feeReceiverBalanceAfter = await mockUSDC.balanceOf(feeReceiver.address);
-        const vaultBalanceAfter = await savingsBank.getVaultBalance();
+        const savingsBankBalanceAfter = await mockUSDC.balanceOf(await savingsBank.getAddress());
+        const vaultBalanceAfter = await vaultManager.totalBalance();
+        const vaultReservesAfter = await vaultManager.reservedFunds();
 
         // Calculate expected values
         // Pro-rata interest: 10,000 * 0.08 * (15/365) ≈ 32.88 USDC
@@ -806,17 +856,31 @@ describe("SavingsBank - User Functions", function () {
         // Penalty: 10,000 * 0.05 = 500 USDC
         const expectedPenalty = (10_000_000_000n * 500n) / BPS_DENOMINATOR;
 
-        // User receives: 10,000 + 32.88 - 500 = 9,532.88 USDC
+        // METHOD 2: User receives:
+        // - From SavingsBank: principal - penalty = 10,000 - 500 = 9,500 USDC
+        // - From VaultManager: pro-rata interest = 32.88 USDC
+        // - Total: 9,532.88 USDC
         const expectedUserAmount = 10_000_000_000n + expectedInterest - expectedPenalty;
 
         expect(userBalanceAfter - userBalanceBefore).to.be.closeTo(expectedUserAmount, ethers.parseUnits("0.1", 6));
+        
+        // METHOD 2: FeeReceiver gets penalty from SavingsBank
         expect(feeReceiverBalanceAfter - feeReceiverBalanceBefore).to.be.closeTo(
           expectedPenalty,
           ethers.parseUnits("0.1", 6)
         );
 
-        // Vault should decrease by interest amount
+        // METHOD 2: SavingsBank decreases by principal (penalty + principal-penalty = principal)
+        expect(savingsBankBalanceBefore - savingsBankBalanceAfter).to.equal(10_000_000_000n);
+
+        // METHOD 2: VaultManager balance decreases by pro-rata interest only (not principal)
         expect(vaultBalanceBefore - vaultBalanceAfter).to.be.closeTo(expectedInterest, ethers.parseUnits("0.1", 6));
+
+        // METHOD 2: Reserved funds decrease by unused interest only
+        // (unused interest is released, pro-rata interest is paid but not released)
+        const fullInterest = (10_000_000_000n * 800n * 30n * 24n * 60n * 60n) / (SECONDS_PER_YEAR * BPS_DENOMINATOR);
+        const unusedInterest = fullInterest - expectedInterest;
+        expect(vaultReservesBefore - vaultReservesAfter).to.be.closeTo(unusedInterest, ethers.parseUnits("0.1", 6));
 
         // Deposit should be WITHDRAWN
         const deposit = await savingsBank.getDeposit(1);
@@ -916,14 +980,21 @@ describe("SavingsBank - User Functions", function () {
         await expect(savingsBank.connect(user1).earlyWithdraw(1)).to.be.revertedWith("Deposit not active");
       });
 
-      it("Should revert if vault has insufficient liquidity", async function () {
-        // Drain vault
-        const vaultBalance = await savingsBank.getVaultBalance();
-        await savingsBank.connect(admin).withdrawVault(vaultBalance);
+      it("Should succeed even when available funds are drained (reserves protected)", async function () {
+        // METHOD 2: Verify that reserved funds are protected for withdrawals
+        const availableFunds = await vaultManager.getAvailableFunds();
+        if (availableFunds > 0) {
+          await vaultManager.withdrawVault(availableFunds);
+        }
 
         await time.increase(15 * 24 * 60 * 60);
 
-        await expect(savingsBank.connect(user1).earlyWithdraw(1)).to.be.revertedWith("Insufficient vault liquidity");
+        // Should succeed because pro-rata interest comes from reserved funds
+        await expect(savingsBank.connect(user1).earlyWithdraw(1)).to.not.be.reverted;
+        
+        // Verify deposit was withdrawn
+        const deposit = await savingsBank.getDeposit(1);
+        expect(deposit.status).to.equal(1); // WITHDRAWN
       });
 
       it("Should revert when contract is paused", async function () {
@@ -949,13 +1020,13 @@ describe("SavingsBank - User Functions", function () {
         // Fast forward to maturity
         await time.increase(30 * 24 * 60 * 60);
 
-        const vaultBalanceBefore = await savingsBank.getVaultBalance();
+        const vaultBalanceBefore = await vaultManager.totalBalance();
 
         // Auto renew (useCurrentRate = false)
         const tx = await savingsBank.connect(user1).renew(1, false);
         const receipt = await tx.wait();
 
-        const vaultBalanceAfter = await savingsBank.getVaultBalance();
+        const vaultBalanceAfter = await vaultManager.totalBalance();
 
         // Old deposit should be AUTORENEWED
         const oldDeposit = await savingsBank.getDeposit(1);
@@ -980,7 +1051,8 @@ describe("SavingsBank - User Functions", function () {
         // Should keep auto renew enabled
         expect(newDeposit.isAutoRenewEnabled).to.be.true;
 
-        // Vault should decrease by interest
+        // METHOD 2: Vault balance should decrease by old interest (transferred to SavingsBank)
+        // Old interest is released and then transferred to SavingsBank to join principal
         expect(vaultBalanceBefore - vaultBalanceAfter).to.be.closeTo(expectedInterest, ethers.parseUnits("0.1", 6));
       });
 
@@ -1091,11 +1163,14 @@ describe("SavingsBank - User Functions", function () {
       it("Should revert if vault has insufficient liquidity", async function () {
         await time.increase(30 * 24 * 60 * 60);
 
-        // Drain vault
-        const vaultBalance = await savingsBank.getVaultBalance();
-        await savingsBank.connect(admin).withdrawVault(vaultBalance);
+        // METHOD 2: Drain available funds from VaultManager
+        const availableFunds = await vaultManager.getAvailableFunds();
+        if (availableFunds > 0) {
+          await vaultManager.withdrawVault(availableFunds);
+        }
 
-        await expect(savingsBank.connect(user1).renew(1, false)).to.be.revertedWith("Insufficient vault liquidity");
+        // Should revert when trying to reserve funds for new deposit
+        await expect(savingsBank.connect(user1).renew(1, false)).to.be.revertedWith("Insufficient available funds");
       });
 
       it("Should revert when contract is paused", async function () {

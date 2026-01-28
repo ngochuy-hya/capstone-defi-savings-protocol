@@ -32,15 +32,58 @@ A decentralized savings protocol that brings traditional banking savings experie
 
 ## 🏗️ Architecture
 
+### Method 2: Separated Principal & Interest 🎯
+
+This protocol implements a **production-grade architecture** with clear separation between user funds and protocol obligations:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                  METHOD 2 ARCHITECTURE                       │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌────────────────────┐          ┌────────────────────┐    │
+│  │   SavingsBank      │          │   VaultManager     │    │
+│  │                    │          │                    │    │
+│  │  Holds:            │          │  Holds:            │    │
+│  │  ✓ User Principal  │          │  ✓ Interest Pool   │    │
+│  │  ✓ User Deposits   │          │  ✓ Reserved Funds  │    │
+│  └────────────────────┘          └────────────────────┘    │
+│           │                                │                │
+│           ▼                                ▼                │
+│    User Principal                  Interest Payments       │
+│    (Customer Assets)               (Protocol Obligation)   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Key Benefits:**
+- 🔒 **User principal protected** - Held separately in SavingsBank
+- 💰 **Capital efficient** - VaultManager only needs ~2-10% of TVL for interest
+- 📊 **Clear accounting** - Easy to audit and verify solvency
+- 🛡️ **Regulatory friendly** - Clear segregation of customer funds
+
 ### Smart Contracts
 
 #### **SavingsBank.sol** (Main Contract)
 Core contract handling all savings operations:
-- Saving plan management (Admin)
-- Deposit certificate lifecycle
-- Interest calculation (simple interest)
-- Liquidity vault management
-- User deposit/withdrawal operations
+- 👤 **User deposits** - Holds all principal (customer funds)
+- 📋 **Plan management** - Admin creates/updates saving plans
+- 🎫 **ERC721 Integration** - Deposit certificates as transferrable NFTs
+- 💵 **Withdraw logic** - Principal from SavingsBank, interest from VaultManager
+- ♻️ **Renewal** - Interest compounds into principal
+
+#### **VaultManager.sol** (Interest Pool Manager)
+Manages protocol liquidity for interest payments:
+- 💰 **Interest reserves** - Reserve funds for expected interest
+- 🏦 **Liquidity pool** - Admin funds vault for interest payments
+- 📊 **Health monitoring** - Track vault solvency (120% minimum ratio)
+- 🔐 **Access control** - Only SavingsBank can reserve/release/transfer
+
+#### **InterestCalculator.sol** (Library)
+Pure functions for interest calculations:
+- 📈 Simple interest formula
+- ⏱️ Pro-rata interest for early withdrawal
+- 💸 Penalty calculations
+- 📊 Maturity estimations
 
 #### **MockUSDC.sol** (Test Token)
 ERC20 token with 6 decimals for testing (mimics real USDC)
@@ -51,8 +94,9 @@ ERC20 token with 6 decimals for testing (mimics real USDC)
 Traditional Banking          →    Blockchain Implementation
 ─────────────────────────────────────────────────────────────
 Saving Plans                 →    Struct with tenor/APR config
-Deposit Certificates         →    Unique deposit ID (NFT-like)
-Interest Payment             →    Simple interest from vault
+Deposit Certificates         →    ERC721 NFT with unique ID
+Interest Payment             →    Simple interest from VaultManager
+Principal Storage            →    Held in SavingsBank contract
 Bank Manager                 →    Admin role with AccessControl
 ```
 
@@ -103,22 +147,27 @@ yarn hardhat coverage
 ### Deploy to Testnet
 
 ```bash
-# Deploy to Sepolia
-yarn hardhat deploy --network sepolia
+# Deploy to Sepolia (all contracts)
+npx hardhat run scripts/deploy_sepolia.ts --network sepolia
 
-# Verify contracts
-yarn hardhat verify --network sepolia <CONTRACT_ADDRESS>
+# Verify contracts on Etherscan
+npx hardhat verify --network sepolia 0xC62464eaD63c27aE68B296522837e923f856fe05
+npx hardhat verify --network sepolia 0x870d756E4Ec6745C24CE3DAD776cC53ddB51ae62 "0xC62464eaD63c27aE68B296522837e923f856fe05" "0x7Fd5E1B5954B00027cA0C2FC152449411089BF1d" 12000
+npx hardhat verify --network sepolia 0xB95742736EDeE68c9cb3F9a44D3F04D96F40d7d4 "0xC62464eaD63c27aE68B296522837e923f856fe05" "0x870d756E4Ec6745C24CE3DAD776cC53ddB51ae62" "0x7Fd5E1B5954B00027cA0C2FC152449411089BF1d" "0x7Fd5E1B5954B00027cA0C2FC152449411089BF1d"
 ```
 
 ---
 
 ## 📊 Deployed Contracts
 
-> **Status:** 🚧 Under Development - Deployment addresses will be updated after testnet deployment
+> **Status:** ✅ **LIVE ON SEPOLIA TESTNET** - All contracts deployed and verified!
 
 ### Sepolia Testnet
-- **MockUSDC**: `TBD`
-- **SavingsBank**: `TBD`
+- **MockUSDC**: [`0xC62464eaD63c27aE68B296522837e923f856fe05`](https://sepolia.etherscan.io/address/0xC62464eaD63c27aE68B296522837e923f856fe05#code)
+- **VaultManager**: [`0x870d756E4Ec6745C24CE3DAD776cC53ddB51ae62`](https://sepolia.etherscan.io/address/0x870d756E4Ec6745C24CE3DAD776cC53ddB51ae62#code)
+- **SavingsBank**: [`0xB95742736EDeE68c9cb3F9a44D3F04D96F40d7d4`](https://sepolia.etherscan.io/address/0xB95742736EDeE68c9cb3F9a44D3F04D96F40d7d4#code)
+
+📖 **[View Full Deployment Details](./docs/SEPOLIA_DEPLOYMENT.md)**
 
 ---
 
@@ -230,5 +279,5 @@ Capstone Project - January 2025
 
 ---
 
-> **Project Status:** 🔄 In Progress  
-> **Last Updated:** January 27, 2025
+> **Project Status:** ✅ Blockchain Complete - Ready for Frontend Integration  
+> **Last Updated:** January 29, 2026

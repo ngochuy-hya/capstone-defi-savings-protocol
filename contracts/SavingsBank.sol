@@ -2,11 +2,13 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "./libraries/InterestCalculator.sol";
+import "./interfaces/IVaultManager.sol";
 
 /**
  * @title SavingsBank
@@ -20,8 +22,14 @@ import "./libraries/InterestCalculator.sol";
  * - Rút tiền đúng hạn hoặc rút sớm (có phạt)
  * - Gia hạn sổ tiết kiệm
  * - ERC721: Mỗi deposit là một NFT transferrable
+ * 
+ * @notice Method 2 Architecture:
+ * - SavingsBank giữ toàn bộ principal của users (USDC deposits)
+ * - VaultManager chỉ giữ liquidity pool để trả lãi (interest only)
+ * - Clear separation: user funds (principal) vs protocol funds (interest)
  */
 contract SavingsBank is ERC721Enumerable, ReentrancyGuard, Pausable, AccessControl {
+    using SafeERC20 for IERC20;
     
     // ROLES
     /// @dev Role cho admin (quản lý toàn bộ hệ thống)
@@ -72,8 +80,8 @@ contract SavingsBank is ERC721Enumerable, ReentrancyGuard, Pausable, AccessContr
     /// @dev Token USDC để gửi tiết kiệm
     IERC20 public immutable depositToken;
     
-    /// @dev Vault chứa tiền để trả lãi cho user
-    uint256 public liquidityVault;
+    /// @dev VaultManager contract quản lý vault
+    IVaultManager public immutable vaultManager;
     
     /// @dev Địa chỉ nhận phí phạt (khi user rút sớm)
     address public feeReceiver;
@@ -166,28 +174,33 @@ contract SavingsBank is ERC721Enumerable, ReentrancyGuard, Pausable, AccessContr
     /**
      * @dev Khởi tạo SavingsBank
      * @param _depositToken Địa chỉ token USDC
+     * @param _vaultManager Địa chỉ VaultManager contract
      * @param _feeReceiver Địa chỉ nhận phí phạt
      * @param _admin Địa chỉ admin đầu tiên
      * 
      * @notice Constructor này setup:
      * - ERC721 với name "Savings Deposit Certificate" và symbol "SDC"
      * - Token USDC để gửi tiết kiệm
+     * - VaultManager contract để quản lý vault
      * - Địa chỉ nhận phí phạt
      * - Admin role cho người quản lý
      * - ID bắt đầu từ 1 (dễ debug hơn 0)
      */
     constructor(
         address _depositToken,
+        address _vaultManager,
         address _feeReceiver,
         address _admin
     ) ERC721("Savings Deposit Certificate", "SDC") {
         // Validate inputs
         require(_depositToken != address(0), "Invalid deposit token");
+        require(_vaultManager != address(0), "Invalid vault manager");
         require(_feeReceiver != address(0), "Invalid fee receiver");
         require(_admin != address(0), "Invalid admin");
 
         // Khởi tạo token và địa chỉ
         depositToken = IERC20(_depositToken);
+        vaultManager = IVaultManager(_vaultManager);
         feeReceiver = _feeReceiver;
         
         // Setup roles
@@ -406,43 +419,7 @@ contract SavingsBank is ERC721Enumerable, ReentrancyGuard, Pausable, AccessContr
     }
 
     // ==================== VAULT MANAGEMENT ====================
-
-    /**
-     * @dev Admin nạp tiền vào vault để trả lãi
-     * @param amount Số lượng token nạp vào
-     */
-    function fundVault(uint256 amount) external onlyRole(ADMIN_ROLE) nonReentrant {
-        require(amount > 0, "Amount must be greater than 0");
-        
-        // Transfer token từ admin vào contract
-        require(
-            depositToken.transferFrom(msg.sender, address(this), amount),
-            "Transfer failed"
-        );
-        
-        liquidityVault += amount;
-        
-        emit VaultFunded(msg.sender, amount);
-    }
-
-    /**
-     * @dev Admin rút tiền từ vault
-     * @param amount Số lượng token rút ra
-     */
-    function withdrawVault(uint256 amount) external onlyRole(ADMIN_ROLE) nonReentrant {
-        require(amount > 0, "Amount must be greater than 0");
-        require(amount <= liquidityVault, "Insufficient vault balance");
-        
-        liquidityVault -= amount;
-        
-        // Transfer token từ contract ra admin
-        require(
-            depositToken.transfer(msg.sender, amount),
-            "Transfer failed"
-        );
-        
-        emit VaultWithdrawn(msg.sender, amount);
-    }
+    // Note: Vault management functions removed - use VaultManager contract directly
 
     /**
      * @dev Admin cập nhật địa chỉ nhận phí phạt
@@ -462,14 +439,16 @@ contract SavingsBank is ERC721Enumerable, ReentrancyGuard, Pausable, AccessContr
      * @param enableAutoRenew Có tự động gia hạn khi đáo hạn không
      * @return depositId ID của sổ tiết kiệm mới
      * 
-     * @notice Flow:
+     * @notice Flow (Method 2 - Separated Architecture):
      * 1. Validate plan exists và enabled
      * 2. Check amount nằm trong [minDeposit, maxDeposit]
-     * 3. Transfer USDC từ user vào contract
-     * 4. Tạo DepositCertificate mới
-     * 5. Lock lãi suất hiện tại (cho auto renew)
-     * 6. Lưu vào userDeposits mapping
-     * 7. Emit DepositOpened event
+     * 3. Transfer USDC từ user TRỰC TIẾP vào SavingsBank (giữ principal)
+     * 4. Tính interest cần trả khi đáo hạn
+     * 5. Reserve ONLY interest amount trong VaultManager (không reserve principal)
+     * 6. Tạo DepositCertificate mới
+     * 7. Lock lãi suất hiện tại (cho auto renew)
+     * 8. Lưu vào userDeposits mapping
+     * 9. Emit DepositOpened event
      * 
      * Requirements:
      * - Contract không bị pause
@@ -477,6 +456,12 @@ contract SavingsBank is ERC721Enumerable, ReentrancyGuard, Pausable, AccessContr
      * - Amount phải >= minDeposit
      * - Amount phải <= maxDeposit (nếu có giới hạn)
      * - User phải approve USDC trước
+     * - VaultManager phải có đủ liquidity để reserve interest
+     * 
+     * @notice Method 2 Architecture:
+     * - SavingsBank giữ principal (user deposits)
+     * - VaultManager chỉ giữ liquidity pool để trả lãi
+     * - Khi withdraw: principal từ SavingsBank, interest từ VaultManager
      * 
      * @notice Auto Renew:
      * - Nếu enableAutoRenew = true: tự động gia hạn khi đến maturity
@@ -502,12 +487,9 @@ contract SavingsBank is ERC721Enumerable, ReentrancyGuard, Pausable, AccessContr
             require(amount <= plan.maxDeposit, "Amount exceeds maximum deposit");
         }
         
-        // Transfer USDC từ user vào contract
+        // METHOD 2: Transfer principal DIRECTLY to SavingsBank (not VaultManager)
         // User phải approve trước khi gọi function này
-        require(
-            depositToken.transferFrom(msg.sender, address(this), amount),
-            "Transfer failed"
-        );
+        depositToken.safeTransferFrom(msg.sender, address(this), amount);
         
         // Tạo deposit certificate mới
         uint256 depositId = nextDepositId;
@@ -515,6 +497,16 @@ contract SavingsBank is ERC721Enumerable, ReentrancyGuard, Pausable, AccessContr
         
         // Tính maturity time
         uint256 maturityAt = block.timestamp + (uint256(plan.tenorDays) * 1 days);
+        
+        // METHOD 2: Calculate interest cần reserve trong VaultManager
+        uint256 expectedInterest = InterestCalculator.calculateTotalInterestForReserve(
+            amount,
+            plan.aprBps,
+            plan.tenorDays
+        );
+        
+        // METHOD 2: Reserve ONLY interest trong VaultManager (không reserve principal)
+        vaultManager.reserveFunds(expectedInterest);
         
         // Lưu deposit certificate
         deposits[depositId] = DepositCertificate({
@@ -604,22 +596,29 @@ contract SavingsBank is ERC721Enumerable, ReentrancyGuard, Pausable, AccessContr
      * @dev User rút tiền khi đáo hạn
      * @param depositId ID của sổ tiết kiệm
      * 
-     * @notice Flow:
+     * @notice Flow (Method 2 - Separated Architecture):
      * 1. Validate deposit exists và đang ACTIVE
      * 2. Check msg.sender là owner
      * 3. Check đã đến maturityAt
      * 4. Tính lãi (simple interest)
-     * 5. Check vault đủ tiền trả lãi
-     * 6. Transfer principal + interest cho user
-     * 7. Update deposit status = WITHDRAWN
-     * 8. Emit Withdrawn event
+     * 5. Release reserved interest từ VaultManager
+     * 6. Transfer principal từ SavingsBank balance
+     * 7. Transfer interest từ VaultManager
+     * 8. Update deposit status = WITHDRAWN
+     * 9. Emit Withdrawn event
      * 
      * Requirements:
      * - Contract không bị pause
      * - Deposit đang ACTIVE
      * - Msg.sender là owner
      * - block.timestamp >= maturityAt
-     * - Vault đủ liquidity để trả lãi
+     * - SavingsBank đủ principal để trả
+     * - VaultManager đủ interest để trả
+     * 
+     * @notice Method 2 Architecture:
+     * - Principal được trả từ SavingsBank's balance (USDC held in contract)
+     * - Interest được trả từ VaultManager's liquidity pool
+     * - Clear separation: user funds vs protocol interest pool
      * 
      * @notice User nhận: principal + full interest
      */
@@ -641,32 +640,25 @@ contract SavingsBank is ERC721Enumerable, ReentrancyGuard, Pausable, AccessContr
         require(block.timestamp >= cert.maturityAt, "Not yet matured");
         
         // Tính lãi đầy đủ (từ startAt → maturityAt)
-        SavingPlan memory plan = plans[cert.planId];
         uint256 durationSeconds = cert.maturityAt - cert.startAt;
         
         uint256 interest = InterestCalculator.calculateSimpleInterest(
             cert.principal,
-            plan.aprBps,
+            cert.lockedAprBps,  // Dùng locked rate
             durationSeconds
         );
-        
-        // Check vault đủ tiền trả lãi
-        require(liquidityVault >= interest, "Insufficient vault liquidity");
-        
-        // Trừ lãi từ vault
-        liquidityVault -= interest;
         
         // Update deposit status
         cert.status = DepositStatus.WITHDRAWN;
         
-        // Tính tổng tiền trả cho user
-        uint256 totalAmount = cert.principal + interest;
+        // METHOD 2: Release reserved interest từ VaultManager
+        vaultManager.releaseFunds(interest);
         
-        // Transfer principal + interest cho user
-        require(
-            depositToken.transfer(msg.sender, totalAmount),
-            "Transfer failed"
-        );
+        // METHOD 2: Transfer principal từ SavingsBank balance
+        depositToken.safeTransfer(msg.sender, cert.principal);
+        
+        // METHOD 2: Transfer interest từ VaultManager
+        vaultManager.transferOut(msg.sender, interest);
         
         emit Withdrawn(depositId, msg.sender, cert.principal, interest, false);
     }
@@ -675,31 +667,40 @@ contract SavingsBank is ERC721Enumerable, ReentrancyGuard, Pausable, AccessContr
      * @dev User rút tiền trước hạn (early withdrawal) với phạt
      * @param depositId ID của sổ tiết kiệm
      * 
-     * @notice Flow:
+     * @notice Flow (Method 2 - Separated Architecture):
      * 1. Validate deposit chưa matured (nếu đã matured thì dùng withdraw())
-     * 2. Calculate pro-rata interest (lãi theo thời gian đã qua)
-     * 3. Calculate penalty (phần trăm của principal)
-     * 4. Check vault liquidity
-     * 5. Transfer (principal + interest - penalty) cho user
-     * 6. Transfer penalty cho feeReceiver
-     * 7. Update status = WITHDRAWN
-     * 8. Emit Withdrawn event với isEarly = true
+     * 2. Calculate penalty (phần trăm của principal)
+     * 3. Release ALL reserved interest từ VaultManager (user gets NO interest)
+     * 4. Transfer (principal - penalty) từ SavingsBank
+     * 5. Transfer penalty to feeReceiver từ SavingsBank
+     * 6. Update status = WITHDRAWN
+     * 7. Emit Withdrawn event với interest = 0 và isEarly = true
      * 
      * Requirements:
      * - Contract không bị pause
      * - Deposit phải ACTIVE
      * - Chỉ owner mới rút được
      * - Phải chưa đáo hạn (nếu đã đáo hạn dùng withdraw())
-     * - Vault phải đủ liquidity
+     * - SavingsBank đủ principal
+     * 
+     * @notice Method 2 Architecture:
+     * - Principal và penalty xử lý trong SavingsBank
+     * - NO interest paid for early withdrawal (phạt = mất lãi)
+     * - All reserved interest released back to VaultManager
+     * 
+     * @notice Business Rule: KHÔNG TRẢ LÃI KHI RÚT SỚM
+     * - User KHÔNG nhận bất kỳ lãi nào (kể cả pro-rata)
+     * - Đây là một hình thức phạt (ngoài penalty fee)
+     * - Khuyến khích user giữ đến đáo hạn
      * 
      * Example:
      * - Principal: 10,000 USDC
      * - Plan: 30 days, 8% APR, 5% penalty
      * - Withdraw after 15 days:
-     *   + Pro-rata interest: 10,000 * 0.08 * (15/365) ≈ 32.88 USDC
      *   + Penalty: 10,000 * 0.05 = 500 USDC
-     *   + User receives: 10,000 + 32.88 - 500 = 9,532.88 USDC
-     *   + Fee receiver gets: 500 USDC
+     *   + Interest: 0 USDC (NO INTEREST for early withdraw)
+     *   + User receives: 10,000 - 500 = 9,500 USDC (principal - penalty only)
+     *   + Fee receiver gets: 500 USDC (from SavingsBank)
      */
     function earlyWithdraw(uint256 depositId)
         external
@@ -718,64 +719,57 @@ contract SavingsBank is ERC721Enumerable, ReentrancyGuard, Pausable, AccessContr
         
         SavingPlan memory plan = plans[cert.planId];
         
-        // Calculate pro-rata interest (lãi theo thời gian đã qua)
-        uint256 durationSeconds = block.timestamp - cert.startAt;
-        uint256 proRataInterest = 0;
+        // Calculate full interest (đã reserve lúc open)
+        uint256 fullDurationSeconds = cert.maturityAt - cert.startAt;
+        uint256 fullInterest = InterestCalculator.calculateSimpleInterest(
+            cert.principal,
+            cert.lockedAprBps,
+            fullDurationSeconds
+        );
         
-        if (durationSeconds > 0) {
-            proRataInterest = InterestCalculator.calculateSimpleInterest(
-                cert.principal,
-                cert.lockedAprBps,
-                durationSeconds
-            );
-        }
+        // Early withdraw: NO INTEREST paid (user only gets principal - penalty)
+        // Pro-rata interest calculation removed as per business requirements
         
-        // Calculate penalty
+        // Calculate penalty from principal
         uint256 penalty = (cert.principal * plan.earlyWithdrawPenaltyBps) / BPS_DENOMINATOR;
-        
-        // Check vault có đủ tiền trả lãi
-        require(liquidityVault >= proRataInterest, "Insufficient vault liquidity");
-        
-        // Trừ lãi từ vault
-        liquidityVault -= proRataInterest;
         
         // Update deposit status
         cert.status = DepositStatus.WITHDRAWN;
         
-        // Calculate amounts
-        uint256 totalBeforePenalty = cert.principal + proRataInterest;
+        // METHOD 2: Release ALL reserved interest (user gets NO interest for early withdraw)
+        if (fullInterest > 0) {
+            vaultManager.releaseFunds(fullInterest);
+        }
         
-        // Nếu penalty > total, user nhận 0 và penalty = total
-        uint256 userAmount;
+        // METHOD 2: Handle principal and penalty from SavingsBank
+        // Calculate amounts from principal
+        uint256 principalAfterPenalty;
         uint256 actualPenalty;
         
-        if (penalty >= totalBeforePenalty) {
-            // Penalty lớn hơn hoặc bằng total: user nhận 0
-            userAmount = 0;
-            actualPenalty = totalBeforePenalty;
+        if (penalty >= cert.principal) {
+            // Edge case: penalty >= principal
+            principalAfterPenalty = 0;
+            actualPenalty = cert.principal;
         } else {
-            // Normal case: user nhận (principal + interest - penalty)
-            userAmount = totalBeforePenalty - penalty;
+            // Normal case
+            principalAfterPenalty = cert.principal - penalty;
             actualPenalty = penalty;
         }
         
-        // Transfer penalty to feeReceiver (nếu có)
+        // METHOD 2: Transfer penalty to feeReceiver từ SavingsBank (nếu có)
         if (actualPenalty > 0) {
-            require(
-                depositToken.transfer(feeReceiver, actualPenalty),
-                "Penalty transfer failed"
-            );
+            depositToken.safeTransfer(feeReceiver, actualPenalty);
         }
         
-        // Transfer remaining amount to user (nếu có)
-        if (userAmount > 0) {
-            require(
-                depositToken.transfer(msg.sender, userAmount),
-                "Transfer failed"
-            );
+        // METHOD 2: Transfer principal (after penalty) to user từ SavingsBank (nếu có)
+        if (principalAfterPenalty > 0) {
+            depositToken.safeTransfer(msg.sender, principalAfterPenalty);
         }
         
-        emit Withdrawn(depositId, msg.sender, cert.principal, proRataInterest, true);
+        // METHOD 2: NO interest paid for early withdrawal
+        // User only receives principal minus penalty
+        
+        emit Withdrawn(depositId, msg.sender, cert.principal, 0, true);
     }
 
     /**
@@ -784,17 +778,19 @@ contract SavingsBank is ERC721Enumerable, ReentrancyGuard, Pausable, AccessContr
      * @param useCurrentRate True = dùng lãi suất hiện tại của plan, False = giữ lãi suất cũ (locked)
      * @return newDepositId ID của sổ tiết kiệm mới sau khi gia hạn
      * 
-     * @notice Flow:
+     * @notice Flow (Method 2 - Separated Architecture):
      * 1. Validate deposit đã đáo hạn (matured)
      * 2. Calculate interest từ deposit cũ
-     * 3. Tạo deposit mới với principal = principal cũ + interest
-     * 4. Chọn lãi suất:
+     * 3. Release old reserved interest từ VaultManager
+     * 4. Transfer interest từ VaultManager vào SavingsBank
+     * 5. New principal = old principal + interest (cả 2 đều ở SavingsBank)
+     * 6. Reserve new interest amount trong VaultManager
+     * 7. Chọn lãi suất:
      *    - useCurrentRate = false (AUTO): giữ nguyên lockedAprBps cũ
      *    - useCurrentRate = true (MANUAL): dùng lãi suất hiện tại của plan
-     * 5. Giữ nguyên isAutoRenewEnabled từ deposit cũ
-     * 6. Mark deposit cũ = AUTORENEWED hoặc MANUALRENEWED
-     * 7. Không transfer USDC (principal + interest tự động roll over)
-     * 8. Emit Renewed event
+     * 8. Giữ nguyên isAutoRenewEnabled từ deposit cũ
+     * 9. Mark deposit cũ = AUTORENEWED hoặc MANUALRENEWED
+     * 10. Emit Renewed event
      * 
      * Requirements:
      * - Contract không bị pause
@@ -802,7 +798,12 @@ contract SavingsBank is ERC721Enumerable, ReentrancyGuard, Pausable, AccessContr
      * - Chỉ owner mới renew được
      * - Phải đã đáo hạn (matured)
      * - Plan phải còn enabled
-     * - Vault phải đủ tiền để cover interest
+     * - VaultManager phải đủ tiền để cover interest cũ và reserve interest mới
+     * 
+     * @notice Method 2 Architecture:
+     * - Interest từ deposit cũ được transfer từ VaultManager vào SavingsBank
+     * - Principal mới = old principal (trong SavingsBank) + interest (từ VaultManager)
+     * - Reserve interest mới cho kỳ hạn tiếp theo trong VaultManager
      * 
      * @notice Auto Renew Logic:
      * - Nếu user mở deposit với auto renew enabled
@@ -817,14 +818,18 @@ contract SavingsBank is ERC721Enumerable, ReentrancyGuard, Pausable, AccessContr
      * - Nếu admin giảm lãi suất, user chịu lãi thấp hơn
      * 
      * Example 1 - Auto Renew:
-     * - Deposit cũ: 10,000 USDC, 30 days, 8% APR locked
-     * - Interest earned: 65.75 USDC
+     * - Old deposit: 10,000 USDC (SavingsBank), 30 days, 8% APR locked
+     * - Interest earned: 65.75 USDC (from VaultManager → SavingsBank)
+     * - New principal: 10,065.75 USDC (all in SavingsBank)
      * - New deposit: 10,065.75 USDC, 30 days, 8% APR locked (giữ nguyên)
+     * - New reserved: 66.18 USDC (in VaultManager)
      * 
      * Example 2 - Manual Renew (plan rate giảm xuống 6%):
-     * - Deposit cũ: 10,000 USDC, 30 days, 8% APR locked
-     * - Interest earned: 65.75 USDC  
+     * - Old deposit: 10,000 USDC (SavingsBank), 30 days, 8% APR locked
+     * - Interest earned: 65.75 USDC (from VaultManager → SavingsBank)
+     * - New principal: 10,065.75 USDC (all in SavingsBank)
      * - New deposit: 10,065.75 USDC, 30 days, 6% APR (dùng rate mới)
+     * - New reserved: 49.64 USDC (in VaultManager)
      */
     function renew(uint256 depositId, bool useCurrentRate)
         external
@@ -848,15 +853,14 @@ contract SavingsBank is ERC721Enumerable, ReentrancyGuard, Pausable, AccessContr
         // Calculate interest from old deposit
         uint256 interest = calculateInterest(depositId);
         
-        // Check vault có đủ tiền để cover interest (interest sẽ được add vào principal mới)
-        // Lưu ý: interest không được transfer ra, mà được cộng vào principal
-        // Vault vẫn cần "reserve" interest này cho new deposit
-        require(liquidityVault >= interest, "Insufficient vault liquidity");
+        // METHOD 2: Release old reserved interest từ VaultManager
+        vaultManager.releaseFunds(interest);
         
-        // Trừ interest từ vault (vì đã earned)
-        liquidityVault -= interest;
+        // METHOD 2: Transfer interest từ VaultManager vào SavingsBank
+        // (Interest được cộng vào principal trong SavingsBank)
+        vaultManager.transferOut(address(this), interest);
         
-        // New principal = old principal + interest
+        // New principal = old principal + interest (cả 2 đều ở SavingsBank)
         uint256 newPrincipal = oldCert.principal + interest;
         
         // Validate new principal nằm trong range của plan
@@ -878,6 +882,14 @@ contract SavingsBank is ERC721Enumerable, ReentrancyGuard, Pausable, AccessContr
             newAprBps = oldCert.lockedAprBps;
             newStatus = DepositStatus.AUTORENEWED;
         }
+        
+        // METHOD 2: Reserve new interest amount trong VaultManager
+        uint256 newExpectedInterest = InterestCalculator.calculateTotalInterestForReserve(
+            newPrincipal,
+            newAprBps,
+            plan.tenorDays
+        );
+        vaultManager.reserveFunds(newExpectedInterest);
         
         // Mark old deposit as renewed
         oldCert.status = newStatus;
@@ -923,6 +935,24 @@ contract SavingsBank is ERC721Enumerable, ReentrancyGuard, Pausable, AccessContr
     }
 
     /**
+     * @dev Lấy tất cả plans
+     * @return allPlans Mảng chứa tất cả saving plans
+     * 
+     * @notice Function này trả về tất cả plans (cả enabled và disabled)
+     * @notice Frontend có thể filter chỉ enabled plans nếu cần
+     */
+    function getAllPlans() external view returns (SavingPlan[] memory) {
+        uint256 planCount = nextPlanId - 1; // nextPlanId starts from 1
+        SavingPlan[] memory allPlans = new SavingPlan[](planCount);
+        
+        for (uint256 i = 1; i <= planCount; i++) {
+            allPlans[i - 1] = plans[i];
+        }
+        
+        return allPlans;
+    }
+
+    /**
      * @dev User bật/tắt auto renew cho deposit của mình
      * @param depositId ID của sổ tiết kiệm
      * @param enable True = bật auto renew, False = tắt
@@ -958,9 +988,60 @@ contract SavingsBank is ERC721Enumerable, ReentrancyGuard, Pausable, AccessContr
     }
 
     /**
-     * @dev Lấy số dư vault hiện tại
+     * @dev Lấy thông tin liquidity pool từ VaultManager
+     * @return totalBalance Tổng số dư VaultManager (interest pool)
+     * @return reservedFunds Số tiền đã reserve cho deposits
+     * @return availableFunds Số tiền available để reserve thêm
+     * 
+     * @notice Method 2: VaultManager chỉ quản lý interest pool, không phải principal
      */
-    function getVaultBalance() external view returns (uint256) {
-        return liquidityVault;
+    function getVaultInfo() external view returns (
+        uint256 totalBalance,
+        uint256 reservedFunds,
+        uint256 availableFunds
+    ) {
+        totalBalance = vaultManager.totalBalance();
+        reservedFunds = vaultManager.reservedFunds();
+        availableFunds = vaultManager.getAvailableFunds();
+        
+        return (totalBalance, reservedFunds, availableFunds);
+    }
+
+    /**
+     * @dev Lấy tổng principal đang được giữ trong SavingsBank
+     * @return balance Tổng USDC balance của SavingsBank contract
+     * 
+     * @notice Method 2: Đây là tổng principal của tất cả user deposits
+     */
+    function getTotalPrincipalHeld() external view returns (uint256) {
+        return depositToken.balanceOf(address(this));
+    }
+
+    /**
+     * @dev Lấy thông tin tổng quan về contract
+     * @return principalHeld Tổng principal trong SavingsBank
+     * @return vaultTotal Tổng interest pool trong VaultManager
+     * @return vaultReserved Interest đã reserve
+     * @return vaultAvailable Interest available
+     * @return totalDeposits Tổng số deposits đã mở
+     * 
+     * @notice Method 2 Summary:
+     * - principalHeld: User funds (in SavingsBank)
+     * - vaultTotal: Protocol interest pool (in VaultManager)
+     */
+    function getContractSummary() external view returns (
+        uint256 principalHeld,
+        uint256 vaultTotal,
+        uint256 vaultReserved,
+        uint256 vaultAvailable,
+        uint256 totalDeposits
+    ) {
+        principalHeld = depositToken.balanceOf(address(this));
+        vaultTotal = vaultManager.totalBalance();
+        vaultReserved = vaultManager.reservedFunds();
+        vaultAvailable = vaultManager.getAvailableFunds();
+        totalDeposits = nextDepositId - 1;
+        
+        return (principalHeld, vaultTotal, vaultReserved, vaultAvailable, totalDeposits);
     }
 }
