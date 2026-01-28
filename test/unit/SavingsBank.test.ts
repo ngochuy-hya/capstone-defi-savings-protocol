@@ -105,7 +105,7 @@ describe("SavingsBank - User Functions", function () {
         const userBalanceBefore = await mockUSDC.balanceOf(user1.address);
         const contractBalanceBefore = await mockUSDC.balanceOf(await savingsBank.getAddress());
 
-        const tx = await savingsBank.connect(user1).openDeposit(planId, depositAmount);
+        const tx = await savingsBank.connect(user1).openDeposit(planId, depositAmount, false);
         const receipt = await tx.wait();
 
         // Check event emitted
@@ -140,9 +140,9 @@ describe("SavingsBank - User Functions", function () {
       });
 
       it("Should allow multiple deposits from same user", async function () {
-        await savingsBank.connect(user1).openDeposit(1, ethers.parseUnits("1000", 6));
-        await savingsBank.connect(user1).openDeposit(2, ethers.parseUnits("2000", 6));
-        await savingsBank.connect(user1).openDeposit(3, ethers.parseUnits("3000", 6));
+        await savingsBank.connect(user1).openDeposit(1, ethers.parseUnits("1000", 6), false);
+        await savingsBank.connect(user1).openDeposit(2, ethers.parseUnits("2000", 6), false);
+        await savingsBank.connect(user1).openDeposit(3, ethers.parseUnits("3000", 6), false);
 
         const userDeposits = await savingsBank.getUserDeposits(user1.address);
         expect(userDeposits.length).to.equal(3);
@@ -152,8 +152,8 @@ describe("SavingsBank - User Functions", function () {
       });
 
       it("Should allow multiple users to open deposits", async function () {
-        await savingsBank.connect(user1).openDeposit(1, ethers.parseUnits("1000", 6));
-        await savingsBank.connect(user2).openDeposit(1, ethers.parseUnits("2000", 6));
+        await savingsBank.connect(user1).openDeposit(1, ethers.parseUnits("1000", 6), false);
+        await savingsBank.connect(user2).openDeposit(1, ethers.parseUnits("2000", 6), false);
 
         const user1Deposits = await savingsBank.getUserDeposits(user1.address);
         const user2Deposits = await savingsBank.getUserDeposits(user2.address);
@@ -170,7 +170,7 @@ describe("SavingsBank - User Functions", function () {
 
       it("Should handle minimum deposit amount", async function () {
         const minDeposit = PLAN_7_DAYS.minDeposit;
-        await savingsBank.connect(user1).openDeposit(1, minDeposit);
+        await savingsBank.connect(user1).openDeposit(1, minDeposit, false);
 
         const deposit = await savingsBank.getDeposit(1);
         expect(deposit.principal).to.equal(minDeposit);
@@ -178,7 +178,7 @@ describe("SavingsBank - User Functions", function () {
 
       it("Should handle maximum deposit amount", async function () {
         const maxDeposit = PLAN_7_DAYS.maxDeposit;
-        await savingsBank.connect(user1).openDeposit(1, maxDeposit);
+        await savingsBank.connect(user1).openDeposit(1, maxDeposit, false);
 
         const deposit = await savingsBank.getDeposit(1);
         expect(deposit.principal).to.equal(maxDeposit);
@@ -186,7 +186,7 @@ describe("SavingsBank - User Functions", function () {
 
       it("Should handle plan with no max deposit limit", async function () {
         const largeAmount = ethers.parseUnits("50000", 6); // 50k USDC
-        await savingsBank.connect(user1).openDeposit(3, largeAmount); // Plan 3 has no limit
+        await savingsBank.connect(user1).openDeposit(3, largeAmount, false); // Plan 3 has no limit
 
         const deposit = await savingsBank.getDeposit(1);
         expect(deposit.principal).to.equal(largeAmount);
@@ -196,7 +196,7 @@ describe("SavingsBank - User Functions", function () {
     describe("Failure Cases", function () {
       it("Should revert if plan does not exist", async function () {
         await expect(
-          savingsBank.connect(user1).openDeposit(999, ethers.parseUnits("1000", 6))
+          savingsBank.connect(user1).openDeposit(999, ethers.parseUnits("1000", 6), false)
         ).to.be.revertedWith("Plan does not exist");
       });
 
@@ -204,7 +204,7 @@ describe("SavingsBank - User Functions", function () {
         await savingsBank.connect(admin).enablePlan(1, false);
 
         await expect(
-          savingsBank.connect(user1).openDeposit(1, ethers.parseUnits("1000", 6))
+          savingsBank.connect(user1).openDeposit(1, ethers.parseUnits("1000", 6), false)
         ).to.be.revertedWith("Plan is disabled");
       });
 
@@ -212,7 +212,7 @@ describe("SavingsBank - User Functions", function () {
         const belowMin = PLAN_7_DAYS.minDeposit - 1n;
 
         await expect(
-          savingsBank.connect(user1).openDeposit(1, belowMin)
+          savingsBank.connect(user1).openDeposit(1, belowMin, false)
         ).to.be.revertedWith("Amount below minimum deposit");
       });
 
@@ -220,14 +220,14 @@ describe("SavingsBank - User Functions", function () {
         const aboveMax = PLAN_7_DAYS.maxDeposit + 1n;
 
         await expect(
-          savingsBank.connect(user1).openDeposit(1, aboveMax)
+          savingsBank.connect(user1).openDeposit(1, aboveMax, false)
         ).to.be.revertedWith("Amount exceeds maximum deposit");
       });
 
       it("Should revert if user has insufficient balance", async function () {
         const tooMuch = ethers.parseUnits("200000", 6); // More than user has
 
-        await expect(savingsBank.connect(user1).openDeposit(3, tooMuch)).to.be.reverted;
+        await expect(savingsBank.connect(user1).openDeposit(3, tooMuch, false)).to.be.reverted;
       });
 
       it("Should revert if user hasn't approved USDC", async function () {
@@ -235,14 +235,14 @@ describe("SavingsBank - User Functions", function () {
         await mockUSDC.mint(newUser.address, ethers.parseUnits("10000", 6));
 
         // Don't approve
-        await expect(savingsBank.connect(newUser).openDeposit(1, ethers.parseUnits("1000", 6))).to.be.reverted;
+        await expect(savingsBank.connect(newUser).openDeposit(1, ethers.parseUnits("1000", 6), false)).to.be.reverted;
       });
 
       it("Should revert when contract is paused", async function () {
         await savingsBank.connect(admin).pause();
 
         await expect(
-          savingsBank.connect(user1).openDeposit(1, ethers.parseUnits("1000", 6))
+          savingsBank.connect(user1).openDeposit(1, ethers.parseUnits("1000", 6), false)
         ).to.be.revertedWithCustomError(savingsBank, "EnforcedPause");
       });
     });
@@ -251,7 +251,7 @@ describe("SavingsBank - User Functions", function () {
   describe("calculateInterest()", function () {
     beforeEach(async function () {
       // User opens a deposit
-      await savingsBank.connect(user1).openDeposit(2, ethers.parseUnits("10000", 6)); // 10k USDC, 30 days, 8% APR
+      await savingsBank.connect(user1).openDeposit(2, ethers.parseUnits("10000", 6), false); // 10k USDC, 30 days, 8% APR
     });
 
     it("Should return 0 interest immediately after opening", async function () {
@@ -303,7 +303,7 @@ describe("SavingsBank - User Functions", function () {
 
     it("Should calculate correct interest for different amounts", async function () {
       // Open another deposit with different amount
-      await savingsBank.connect(user1).openDeposit(2, ethers.parseUnits("5000", 6)); // 5k USDC
+      await savingsBank.connect(user1).openDeposit(2, ethers.parseUnits("5000", 6), false); // 5k USDC
 
       await time.increase(15 * 24 * 60 * 60);
 
@@ -331,7 +331,7 @@ describe("SavingsBank - User Functions", function () {
   describe("withdraw()", function () {
     beforeEach(async function () {
       // User opens a 30-day deposit: 10k USDC at 8% APR
-      await savingsBank.connect(user1).openDeposit(2, ethers.parseUnits("10000", 6));
+      await savingsBank.connect(user1).openDeposit(2, ethers.parseUnits("10000", 6), false);
     });
 
     describe("Success Cases", function () {
@@ -384,7 +384,7 @@ describe("SavingsBank - User Functions", function () {
 
       it("Should handle multiple withdrawals from different users", async function () {
         // User2 opens deposit
-        await savingsBank.connect(user2).openDeposit(2, ethers.parseUnits("5000", 6));
+        await savingsBank.connect(user2).openDeposit(2, ethers.parseUnits("5000", 6), false);
 
         await time.increase(30 * 24 * 60 * 60);
 
@@ -403,7 +403,7 @@ describe("SavingsBank - User Functions", function () {
       });
 
       it("Should calculate exact interest at maturity for 7-day plan", async function () {
-        await savingsBank.connect(user2).openDeposit(1, ethers.parseUnits("1000", 6)); // 1k USDC, 7 days, 5% APR
+        await savingsBank.connect(user2).openDeposit(1, ethers.parseUnits("1000", 6), false); // 1k USDC, 7 days, 5% APR
 
         await time.increase(7 * 24 * 60 * 60);
 
@@ -419,7 +419,7 @@ describe("SavingsBank - User Functions", function () {
       });
 
       it("Should calculate exact interest at maturity for 90-day plan", async function () {
-        await savingsBank.connect(user2).openDeposit(3, ethers.parseUnits("5000", 6)); // 5k USDC, 90 days, 10% APR
+        await savingsBank.connect(user2).openDeposit(3, ethers.parseUnits("5000", 6), false); // 5k USDC, 90 days, 10% APR
 
         await time.increase(90 * 24 * 60 * 60);
 
@@ -497,7 +497,7 @@ describe("SavingsBank - User Functions", function () {
 
       it("Should handle very small deposit amount", async function () {
         const smallAmount = ethers.parseUnits("100", 6); // Minimum for plan 1
-        await savingsBank.connect(user2).openDeposit(1, smallAmount);
+        await savingsBank.connect(user2).openDeposit(1, smallAmount, false);
 
         await time.increase(7 * 24 * 60 * 60);
 
@@ -510,7 +510,7 @@ describe("SavingsBank - User Functions", function () {
 
       it("Should handle large deposit amount", async function () {
         const largeAmount = ethers.parseUnits("50000", 6);
-        await savingsBank.connect(user2).openDeposit(3, largeAmount); // Plan 3 has no max
+        await savingsBank.connect(user2).openDeposit(3, largeAmount, false); // Plan 3 has no max
 
         await time.increase(90 * 24 * 60 * 60);
 
@@ -527,10 +527,10 @@ describe("SavingsBank - User Functions", function () {
   describe("Integration: Full User Journey", function () {
     it("Should complete full deposit lifecycle for multiple users", async function () {
       // User1: 7-day plan
-      await savingsBank.connect(user1).openDeposit(1, ethers.parseUnits("1000", 6));
+      await savingsBank.connect(user1).openDeposit(1, ethers.parseUnits("1000", 6), false);
 
       // User2: 30-day plan
-      await savingsBank.connect(user2).openDeposit(2, ethers.parseUnits("5000", 6));
+      await savingsBank.connect(user2).openDeposit(2, ethers.parseUnits("5000", 6), false);
 
       // Fast forward 7 days
       await time.increase(7 * 24 * 60 * 60);
@@ -556,15 +556,15 @@ describe("SavingsBank - User Functions", function () {
 
     it("Should handle user opening multiple deposits at different times", async function () {
       // Open 3 deposits with delays
-      await savingsBank.connect(user1).openDeposit(1, ethers.parseUnits("1000", 6));
+      await savingsBank.connect(user1).openDeposit(1, ethers.parseUnits("1000", 6), false);
 
       await time.increase(1 * 24 * 60 * 60); // +1 day
 
-      await savingsBank.connect(user1).openDeposit(1, ethers.parseUnits("2000", 6));
+      await savingsBank.connect(user1).openDeposit(1, ethers.parseUnits("2000", 6), false);
 
       await time.increase(1 * 24 * 60 * 60); // +1 day
 
-      await savingsBank.connect(user1).openDeposit(1, ethers.parseUnits("3000", 6));
+      await savingsBank.connect(user1).openDeposit(1, ethers.parseUnits("3000", 6), false);
 
       // Fast forward to first maturity (5 more days = 7 total)
       await time.increase(5 * 24 * 60 * 60);
@@ -591,6 +591,590 @@ describe("SavingsBank - User Functions", function () {
       expect(deposit1.status).to.equal(1);
       expect(deposit2.status).to.equal(1);
       expect(deposit3.status).to.equal(1);
+    });
+  });
+
+  describe("ERC721 Integration", function () {
+    describe("NFT Minting", function () {
+      it("Should mint NFT when opening deposit", async function () {
+        const depositAmount = ethers.parseUnits("1000", 6);
+        await savingsBank.connect(user1).openDeposit(1, depositAmount, false);
+
+        // Check NFT ownership
+        const owner = await savingsBank.ownerOf(1);
+        expect(owner).to.equal(user1.address);
+
+        // Check balance
+        const balance = await savingsBank.balanceOf(user1.address);
+        expect(balance).to.equal(1);
+      });
+
+      it("Should have correct NFT name and symbol", async function () {
+        const name = await savingsBank.name();
+        const symbol = await savingsBank.symbol();
+
+        expect(name).to.equal("Savings Deposit Certificate");
+        expect(symbol).to.equal("SDC");
+      });
+
+      it("Should increment token IDs correctly", async function () {
+        await savingsBank.connect(user1).openDeposit(1, ethers.parseUnits("1000", 6), false);
+        await savingsBank.connect(user1).openDeposit(1, ethers.parseUnits("2000", 6), false);
+        await savingsBank.connect(user2).openDeposit(2, ethers.parseUnits("3000", 6), false);
+
+        expect(await savingsBank.ownerOf(1)).to.equal(user1.address);
+        expect(await savingsBank.ownerOf(2)).to.equal(user1.address);
+        expect(await savingsBank.ownerOf(3)).to.equal(user2.address);
+
+        expect(await savingsBank.balanceOf(user1.address)).to.equal(2);
+        expect(await savingsBank.balanceOf(user2.address)).to.equal(1);
+      });
+    });
+
+    describe("NFT Transfer", function () {
+      beforeEach(async function () {
+        // User1 opens a deposit
+        await savingsBank.connect(user1).openDeposit(1, ethers.parseUnits("5000", 6), false);
+      });
+
+      it("Should transfer NFT and update deposit owner", async function () {
+        // Transfer NFT from user1 to user2
+        await savingsBank.connect(user1).transferFrom(user1.address, user2.address, 1);
+
+        // Check NFT ownership
+        expect(await savingsBank.ownerOf(1)).to.equal(user2.address);
+
+        // Check deposit owner updated
+        const deposit = await savingsBank.getDeposit(1);
+        expect(deposit.owner).to.equal(user2.address);
+
+        // Check balances
+        expect(await savingsBank.balanceOf(user1.address)).to.equal(0);
+        expect(await savingsBank.balanceOf(user2.address)).to.equal(1);
+      });
+
+      it("Should emit DepositTransferred event", async function () {
+        const tx = await savingsBank.connect(user1).transferFrom(user1.address, user2.address, 1);
+        const receipt = await tx.wait();
+
+        const event = receipt?.logs.find((log: any) => {
+          try {
+            return savingsBank.interface.parseLog(log)?.name === "DepositTransferred";
+          } catch {
+            return false;
+          }
+        });
+
+        expect(event).to.not.be.undefined;
+      });
+
+      it("Should update userDeposits mapping after transfer", async function () {
+        // Initial state
+        let user1Deposits = await savingsBank.getUserDeposits(user1.address);
+        let user2Deposits = await savingsBank.getUserDeposits(user2.address);
+        expect(user1Deposits.length).to.equal(1);
+        expect(user2Deposits.length).to.equal(0);
+
+        // Transfer
+        await savingsBank.connect(user1).transferFrom(user1.address, user2.address, 1);
+
+        // After transfer
+        user1Deposits = await savingsBank.getUserDeposits(user1.address);
+        user2Deposits = await savingsBank.getUserDeposits(user2.address);
+        expect(user1Deposits.length).to.equal(0);
+        expect(user2Deposits.length).to.equal(1);
+        expect(user2Deposits[0]).to.equal(1);
+      });
+
+      it("Should allow new owner to withdraw after transfer", async function () {
+        // Transfer to user2
+        await savingsBank.connect(user1).transferFrom(user1.address, user2.address, 1);
+
+        // Fast forward to maturity
+        await time.increase(7 * 24 * 60 * 60);
+
+        // User1 cannot withdraw (no longer owner)
+        await expect(savingsBank.connect(user1).withdraw(1)).to.be.revertedWith("Not deposit owner");
+
+        // User2 can withdraw
+        const balanceBefore = await mockUSDC.balanceOf(user2.address);
+        await savingsBank.connect(user2).withdraw(1);
+        const balanceAfter = await mockUSDC.balanceOf(user2.address);
+
+        expect(balanceAfter).to.be.gt(balanceBefore);
+      });
+
+      it("Should prevent transfer if not owner", async function () {
+        await expect(
+          savingsBank.connect(user2).transferFrom(user1.address, user2.address, 1)
+        ).to.be.reverted;
+      });
+
+      it("Should support safeTransferFrom", async function () {
+        await savingsBank.connect(user1)["safeTransferFrom(address,address,uint256)"](
+          user1.address,
+          user2.address,
+          1
+        );
+
+        expect(await savingsBank.ownerOf(1)).to.equal(user2.address);
+      });
+    });
+
+    describe("ERC721 Enumerable", function () {
+      beforeEach(async function () {
+        // Create multiple deposits
+        await savingsBank.connect(user1).openDeposit(1, ethers.parseUnits("1000", 6), false);
+        await savingsBank.connect(user1).openDeposit(1, ethers.parseUnits("2000", 6), false);
+        await savingsBank.connect(user2).openDeposit(2, ethers.parseUnits("3000", 6), false);
+      });
+
+      it("Should return total supply", async function () {
+        const totalSupply = await savingsBank.totalSupply();
+        expect(totalSupply).to.equal(3);
+      });
+
+      it("Should support tokenByIndex", async function () {
+        const token0 = await savingsBank.tokenByIndex(0);
+        const token1 = await savingsBank.tokenByIndex(1);
+        const token2 = await savingsBank.tokenByIndex(2);
+
+        expect(token0).to.equal(1);
+        expect(token1).to.equal(2);
+        expect(token2).to.equal(3);
+      });
+
+      it("Should support tokenOfOwnerByIndex", async function () {
+        const user1Token0 = await savingsBank.tokenOfOwnerByIndex(user1.address, 0);
+        const user1Token1 = await savingsBank.tokenOfOwnerByIndex(user1.address, 1);
+
+        expect(user1Token0).to.equal(1);
+        expect(user1Token1).to.equal(2);
+
+        const user2Token0 = await savingsBank.tokenOfOwnerByIndex(user2.address, 0);
+        expect(user2Token0).to.equal(3);
+      });
+    });
+
+    describe("ERC165 Support", function () {
+      it("Should support ERC721 interface", async function () {
+        // ERC721 interface ID: 0x80ac58cd
+        const supportsERC721 = await savingsBank.supportsInterface("0x80ac58cd");
+        expect(supportsERC721).to.be.true;
+      });
+
+      it("Should support ERC721Enumerable interface", async function () {
+        // ERC721Enumerable interface ID: 0x780e9d63
+        const supportsEnumerable = await savingsBank.supportsInterface("0x780e9d63");
+        expect(supportsEnumerable).to.be.true;
+      });
+
+      it("Should support AccessControl interface", async function () {
+        // AccessControl interface ID: 0x7965db0b
+        const supportsAccessControl = await savingsBank.supportsInterface("0x7965db0b");
+        expect(supportsAccessControl).to.be.true;
+      });
+    });
+  });
+
+  describe("earlyWithdraw()", function () {
+    beforeEach(async function () {
+      // User opens a 30-day deposit
+      await savingsBank.connect(user1).openDeposit(2, ethers.parseUnits("10000", 6), false);
+    });
+
+    describe("Success Cases", function () {
+      it("Should early withdraw successfully with penalty", async function () {
+        // Fast forward 15 days (half of 30-day term)
+        await time.increase(15 * 24 * 60 * 60);
+
+        const userBalanceBefore = await mockUSDC.balanceOf(user1.address);
+        const feeReceiverBalanceBefore = await mockUSDC.balanceOf(feeReceiver.address);
+        const vaultBalanceBefore = await savingsBank.getVaultBalance();
+
+        await savingsBank.connect(user1).earlyWithdraw(1);
+
+        const userBalanceAfter = await mockUSDC.balanceOf(user1.address);
+        const feeReceiverBalanceAfter = await mockUSDC.balanceOf(feeReceiver.address);
+        const vaultBalanceAfter = await savingsBank.getVaultBalance();
+
+        // Calculate expected values
+        // Pro-rata interest: 10,000 * 0.08 * (15/365) ≈ 32.88 USDC
+        const expectedInterest =
+          (10_000_000_000n * 800n * 15n * 24n * 60n * 60n) / (SECONDS_PER_YEAR * BPS_DENOMINATOR);
+
+        // Penalty: 10,000 * 0.05 = 500 USDC
+        const expectedPenalty = (10_000_000_000n * 500n) / BPS_DENOMINATOR;
+
+        // User receives: 10,000 + 32.88 - 500 = 9,532.88 USDC
+        const expectedUserAmount = 10_000_000_000n + expectedInterest - expectedPenalty;
+
+        expect(userBalanceAfter - userBalanceBefore).to.be.closeTo(expectedUserAmount, ethers.parseUnits("0.1", 6));
+        expect(feeReceiverBalanceAfter - feeReceiverBalanceBefore).to.be.closeTo(
+          expectedPenalty,
+          ethers.parseUnits("0.1", 6)
+        );
+
+        // Vault should decrease by interest amount
+        expect(vaultBalanceBefore - vaultBalanceAfter).to.be.closeTo(expectedInterest, ethers.parseUnits("0.1", 6));
+
+        // Deposit should be WITHDRAWN
+        const deposit = await savingsBank.getDeposit(1);
+        expect(deposit.status).to.equal(1); // WITHDRAWN
+      });
+
+      it("Should emit Withdrawn event with isEarly=true", async function () {
+        await time.increase(10 * 24 * 60 * 60);
+
+        const tx = await savingsBank.connect(user1).earlyWithdraw(1);
+        const receipt = await tx.wait();
+
+        const event = receipt?.logs.find((log: any) => {
+          try {
+            return savingsBank.interface.parseLog(log)?.name === "Withdrawn";
+          } catch {
+            return false;
+          }
+        });
+
+        expect(event).to.not.be.undefined;
+      });
+
+      it("Should handle early withdraw with no interest (immediate)", async function () {
+        // Withdraw immediately (no time passed)
+        const userBalanceBefore = await mockUSDC.balanceOf(user1.address);
+        const feeReceiverBalanceBefore = await mockUSDC.balanceOf(feeReceiver.address);
+
+        await savingsBank.connect(user1).earlyWithdraw(1);
+
+        const userBalanceAfter = await mockUSDC.balanceOf(user1.address);
+        const feeReceiverBalanceAfter = await mockUSDC.balanceOf(feeReceiver.address);
+
+        // Penalty: 10,000 * 0.05 = 500 USDC
+        const expectedPenalty = (10_000_000_000n * 500n) / BPS_DENOMINATOR;
+
+        // User receives: 10,000 - 500 = 9,500 USDC
+        const expectedUserAmount = 10_000_000_000n - expectedPenalty;
+
+        expect(userBalanceAfter - userBalanceBefore).to.be.closeTo(expectedUserAmount, ethers.parseUnits("1", 6));
+        expect(feeReceiverBalanceAfter - feeReceiverBalanceBefore).to.be.closeTo(expectedPenalty, ethers.parseUnits("1", 6));
+      });
+
+      it("Should handle case where penalty >= principal + interest", async function () {
+        // Create a plan with very high penalty (90%)
+        await savingsBank.connect(admin).createPlan(
+          7, // 7 days
+          500, // 5% APR
+          ethers.parseUnits("100", 6),
+          ethers.parseUnits("10000", 6),
+          9000 // 90% penalty
+        );
+
+        await savingsBank.connect(user2).openDeposit(4, ethers.parseUnits("1000", 6), false);
+
+        await time.increase(1 * 24 * 60 * 60); // 1 day
+
+        const userBalanceBefore = await mockUSDC.balanceOf(user2.address);
+        const feeReceiverBalanceBefore = await mockUSDC.balanceOf(feeReceiver.address);
+
+        await savingsBank.connect(user2).earlyWithdraw(2);
+
+        const userBalanceAfter = await mockUSDC.balanceOf(user2.address);
+        const feeReceiverBalanceAfter = await mockUSDC.balanceOf(feeReceiver.address);
+
+        // With 90% penalty, user should receive very little
+        // Principal: 1000, Penalty: 900, Interest: ~0.14 (1 day)
+        // User receives: 1000 + 0.14 - 900 = ~100.14 USDC
+        expect(userBalanceAfter - userBalanceBefore).to.be.closeTo(ethers.parseUnits("100", 6), ethers.parseUnits("1", 6));
+
+        // Fee receiver gets penalty
+        expect(feeReceiverBalanceAfter).to.be.gt(feeReceiverBalanceBefore);
+        expect(feeReceiverBalanceAfter - feeReceiverBalanceBefore).to.be.closeTo(ethers.parseUnits("900", 6), ethers.parseUnits("1", 6));
+      });
+    });
+
+    describe("Failure Cases", function () {
+      it("Should revert if already matured", async function () {
+        // Fast forward past maturity
+        await time.increase(31 * 24 * 60 * 60);
+
+        await expect(savingsBank.connect(user1).earlyWithdraw(1)).to.be.revertedWith(
+          "Already matured, use withdraw()"
+        );
+      });
+
+      it("Should revert if not owner", async function () {
+        await time.increase(10 * 24 * 60 * 60);
+
+        await expect(savingsBank.connect(user2).earlyWithdraw(1)).to.be.revertedWith("Not deposit owner");
+      });
+
+      it("Should revert if deposit not active", async function () {
+        await time.increase(30 * 24 * 60 * 60);
+        await savingsBank.connect(user1).withdraw(1);
+
+        await expect(savingsBank.connect(user1).earlyWithdraw(1)).to.be.revertedWith("Deposit not active");
+      });
+
+      it("Should revert if vault has insufficient liquidity", async function () {
+        // Drain vault
+        const vaultBalance = await savingsBank.getVaultBalance();
+        await savingsBank.connect(admin).withdrawVault(vaultBalance);
+
+        await time.increase(15 * 24 * 60 * 60);
+
+        await expect(savingsBank.connect(user1).earlyWithdraw(1)).to.be.revertedWith("Insufficient vault liquidity");
+      });
+
+      it("Should revert when contract is paused", async function () {
+        await time.increase(10 * 24 * 60 * 60);
+        await savingsBank.connect(admin).pause();
+
+        await expect(savingsBank.connect(user1).earlyWithdraw(1)).to.be.revertedWithCustomError(
+          savingsBank,
+          "EnforcedPause"
+        );
+      });
+    });
+  });
+
+  describe("renew()", function () {
+    beforeEach(async function () {
+      // User opens a 30-day deposit with auto renew enabled
+      await savingsBank.connect(user1).openDeposit(2, ethers.parseUnits("10000", 6), true);
+    });
+
+    describe("Auto Renew (useCurrentRate = false)", function () {
+      it("Should auto renew successfully with locked rate", async function () {
+        // Fast forward to maturity
+        await time.increase(30 * 24 * 60 * 60);
+
+        const vaultBalanceBefore = await savingsBank.getVaultBalance();
+
+        // Auto renew (useCurrentRate = false)
+        const tx = await savingsBank.connect(user1).renew(1, false);
+        const receipt = await tx.wait();
+
+        const vaultBalanceAfter = await savingsBank.getVaultBalance();
+
+        // Old deposit should be AUTORENEWED
+        const oldDeposit = await savingsBank.getDeposit(1);
+        expect(oldDeposit.status).to.equal(2); // AUTORENEWED
+
+        // New deposit should exist
+        const newDeposit = await savingsBank.getDeposit(2);
+        expect(newDeposit.status).to.equal(0); // ACTIVE
+        expect(newDeposit.owner).to.equal(user1.address);
+
+        // Calculate expected interest
+        const expectedInterest =
+          (10_000_000_000n * 800n * 30n * 24n * 60n * 60n) / (SECONDS_PER_YEAR * BPS_DENOMINATOR);
+
+        // New principal = old principal + interest
+        const expectedNewPrincipal = 10_000_000_000n + expectedInterest;
+        expect(newDeposit.principal).to.be.closeTo(expectedNewPrincipal, ethers.parseUnits("0.1", 6));
+
+        // New deposit should have same lockedAprBps as old
+        expect(newDeposit.lockedAprBps).to.equal(oldDeposit.lockedAprBps);
+
+        // Should keep auto renew enabled
+        expect(newDeposit.isAutoRenewEnabled).to.be.true;
+
+        // Vault should decrease by interest
+        expect(vaultBalanceBefore - vaultBalanceAfter).to.be.closeTo(expectedInterest, ethers.parseUnits("0.1", 6));
+      });
+
+      it("Should emit Renewed and DepositOpened events", async function () {
+        await time.increase(30 * 24 * 60 * 60);
+
+        const tx = await savingsBank.connect(user1).renew(1, false);
+        const receipt = await tx.wait();
+
+        const renewedEvent = receipt?.logs.find((log: any) => {
+          try {
+            return savingsBank.interface.parseLog(log)?.name === "Renewed";
+          } catch {
+            return false;
+          }
+        });
+
+        const openedEvent = receipt?.logs.find((log: any) => {
+          try {
+            return savingsBank.interface.parseLog(log)?.name === "DepositOpened";
+          } catch {
+            return false;
+          }
+        });
+
+        expect(renewedEvent).to.not.be.undefined;
+        expect(openedEvent).to.not.be.undefined;
+      });
+
+      it("Should preserve locked rate even if plan rate changed", async function () {
+        // Wait for maturity
+        await time.increase(30 * 24 * 60 * 60);
+
+        // Admin changes plan rate to 6% (down from 8%)
+        await savingsBank.connect(admin).updatePlan(2, 600, ethers.parseUnits("500", 6), ethers.parseUnits("50000", 6), 500);
+
+        // Auto renew
+        await savingsBank.connect(user1).renew(1, false);
+
+        const newDeposit = await savingsBank.getDeposit(2);
+
+        // Should still use old 8% rate (800 bps)
+        expect(newDeposit.lockedAprBps).to.equal(800);
+      });
+    });
+
+    describe("Manual Renew (useCurrentRate = true)", function () {
+      it("Should manual renew successfully with current rate", async function () {
+        await time.increase(30 * 24 * 60 * 60);
+
+        // Manual renew (useCurrentRate = true)
+        await savingsBank.connect(user1).renew(1, true);
+
+        // Old deposit should be MANUALRENEWED
+        const oldDeposit = await savingsBank.getDeposit(1);
+        expect(oldDeposit.status).to.equal(3); // MANUALRENEWED
+
+        // New deposit should have current plan rate
+        const newDeposit = await savingsBank.getDeposit(2);
+        const plan = await savingsBank.getPlan(2);
+        expect(newDeposit.lockedAprBps).to.equal(plan.aprBps);
+      });
+
+      it("Should use updated plan rate if admin changed it", async function () {
+        await time.increase(30 * 24 * 60 * 60);
+
+        // Admin increases plan rate to 10% (up from 8%)
+        await savingsBank.connect(admin).updatePlan(2, 1000, ethers.parseUnits("500", 6), ethers.parseUnits("50000", 6), 500);
+
+        // Manual renew
+        await savingsBank.connect(user1).renew(1, true);
+
+        const newDeposit = await savingsBank.getDeposit(2);
+
+        // Should use new 10% rate (1000 bps)
+        expect(newDeposit.lockedAprBps).to.equal(1000);
+      });
+    });
+
+    describe("Failure Cases", function () {
+      it("Should revert if not yet matured", async function () {
+        // Only 15 days passed (need 30)
+        await time.increase(15 * 24 * 60 * 60);
+
+        await expect(savingsBank.connect(user1).renew(1, false)).to.be.revertedWith("Not yet matured");
+      });
+
+      it("Should revert if not owner", async function () {
+        await time.increase(30 * 24 * 60 * 60);
+
+        await expect(savingsBank.connect(user2).renew(1, false)).to.be.revertedWith("Not deposit owner");
+      });
+
+      it("Should revert if deposit not active", async function () {
+        await time.increase(30 * 24 * 60 * 60);
+        await savingsBank.connect(user1).withdraw(1);
+
+        await expect(savingsBank.connect(user1).renew(1, false)).to.be.revertedWith("Deposit not active");
+      });
+
+      it("Should revert if plan is disabled", async function () {
+        await time.increase(30 * 24 * 60 * 60);
+        await savingsBank.connect(admin).enablePlan(2, false);
+
+        await expect(savingsBank.connect(user1).renew(1, false)).to.be.revertedWith("Plan is disabled");
+      });
+
+      it("Should revert if vault has insufficient liquidity", async function () {
+        await time.increase(30 * 24 * 60 * 60);
+
+        // Drain vault
+        const vaultBalance = await savingsBank.getVaultBalance();
+        await savingsBank.connect(admin).withdrawVault(vaultBalance);
+
+        await expect(savingsBank.connect(user1).renew(1, false)).to.be.revertedWith("Insufficient vault liquidity");
+      });
+
+      it("Should revert when contract is paused", async function () {
+        await time.increase(30 * 24 * 60 * 60);
+        await savingsBank.connect(admin).pause();
+
+        await expect(savingsBank.connect(user1).renew(1, false)).to.be.revertedWithCustomError(
+          savingsBank,
+          "EnforcedPause"
+        );
+      });
+    });
+
+    describe("NFT Integration", function () {
+      it("Should mint new NFT for renewed deposit", async function () {
+        await time.increase(30 * 24 * 60 * 60);
+
+        const balanceBefore = await savingsBank.balanceOf(user1.address);
+
+        await savingsBank.connect(user1).renew(1, false);
+
+        const balanceAfter = await savingsBank.balanceOf(user1.address);
+
+        // Should have one more NFT
+        expect(balanceAfter).to.equal(balanceBefore + 1n);
+
+        // Should own the new token
+        expect(await savingsBank.ownerOf(2)).to.equal(user1.address);
+      });
+    });
+  });
+
+  describe("setAutoRenew()", function () {
+    beforeEach(async function () {
+      await savingsBank.connect(user1).openDeposit(2, ethers.parseUnits("10000", 6), false);
+    });
+
+    it("Should enable auto renew", async function () {
+      await savingsBank.connect(user1).setAutoRenew(1, true);
+
+      const deposit = await savingsBank.getDeposit(1);
+      expect(deposit.isAutoRenewEnabled).to.be.true;
+    });
+
+    it("Should disable auto renew", async function () {
+      // First enable it
+      await savingsBank.connect(user1).setAutoRenew(1, true);
+
+      // Then disable it
+      await savingsBank.connect(user1).setAutoRenew(1, false);
+
+      const deposit = await savingsBank.getDeposit(1);
+      expect(deposit.isAutoRenewEnabled).to.be.false;
+    });
+
+    it("Should emit AutoRenewUpdated event", async function () {
+      const tx = await savingsBank.connect(user1).setAutoRenew(1, true);
+      const receipt = await tx.wait();
+
+      const event = receipt?.logs.find((log: any) => {
+        try {
+          return savingsBank.interface.parseLog(log)?.name === "AutoRenewUpdated";
+        } catch {
+          return false;
+        }
+      });
+
+      expect(event).to.not.be.undefined;
+    });
+
+    it("Should revert if not owner", async function () {
+      await expect(savingsBank.connect(user2).setAutoRenew(1, true)).to.be.revertedWith("Not deposit owner");
+    });
+
+    it("Should revert if deposit not active", async function () {
+      await time.increase(30 * 24 * 60 * 60);
+      await savingsBank.connect(user1).withdraw(1);
+
+      await expect(savingsBank.connect(user1).setAutoRenew(1, true)).to.be.revertedWith("Deposit not active");
     });
   });
 });

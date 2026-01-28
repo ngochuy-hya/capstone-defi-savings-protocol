@@ -57,43 +57,58 @@
   - [x] SavingsBank.test.ts (37 test cases) ✅
   - [x] **TOTAL: 135/135 tests passing** ✅
 
-## 🔨 Thứ 4 (28/1) - Hoàn Thiện Tính Năng + Kiểm Thử
+## 🔨 Thứ 4 (28/1) - Hoàn Thiện Tính Năng + Kiểm Thử ✅
 
-**Sáng (3-4 giờ):**
-- [ ] **ERC721 Integration** 
-  - [ ] Extend ERC721Enumerable
-  - [ ] Override _transfer với event
-  - [ ] Implement getUserDeposits()
-- [ ] **Hoàn Thiện Chức Năng Người Dùng**
-  - [ ] earlyWithdraw() - Rút trước hạn với phạt tiền
-  - [ ] renew() - Gia hạn/tái tục sổ
-- [ ] **Hoàn Thiện Sự Kiện** - DepositOpened, Withdrawn, Renewed
-- [ ] **Thiết Lập Bảo Mật**
-  - [ ] AccessControl roles (VAI TRÒ ADMIN)
-  - [ ] Tích hợp ReentrancyGuard (chống tấn công Reentrancy)
-  - [ ] Kiểm tra dữ liệu đầu vào
+**Sáng (3-4 giờ):** ✅
+- [x] **ERC721 Integration** ✅
+  - [x] Extend ERC721Enumerable ✅
+  - [x] Override _update để sync owner khi transfer ✅
+  - [x] Override supportsInterface (resolve conflict) ✅
+  - [x] Mint NFT khi openDeposit ✅
+  - [x] getUserDeposits() (đã có sẵn) ✅
+- [x] **ERC721 Tests** (15 test cases) ✅
+  - [x] NFT minting tests
+  - [x] Transfer và update owner tests
+  - [x] ERC721Enumerable functions tests
+  - [x] ERC165 interface support tests
 
-**Chiều (3-4 giờ) - Kiểm Thử Phần 1:**
-- [ ] **Kiểm Thử Chức Năng Quản Trị**
-  - [ ] Test createPlan, updatePlan
-  - [ ] Test quản lý kho tiền
-  - [ ] Test pause/unpause
-- [ ] **Kiểm Thử Luồng Chính**
-  - [ ] Test openDeposit → chờ → withdraw
-  - [ ] Độ chính xác tính lãi
-  - [ ] Tính đúng đắn của việc chuyển token
+**Chiều (3-4 giờ):** ✅
+- [x] **Enum & Struct Updates** ✅
+  - [x] DepositStatus: Added AUTORENEWED, MANUALRENEWED ✅
+  - [x] DepositCertificate: Added lockedAprBps, isAutoRenewEnabled ✅
+  - [x] openDeposit: Added enableAutoRenew parameter, locks APR ✅
+  - [x] calculateInterest: Uses lockedAprBps for rate protection ✅
+- [x] **earlyWithdraw() Function** ✅
+  - [x] Pro-rata interest calculation
+  - [x] Penalty logic với edge cases
+  - [x] Transfer penalty to feeReceiver
+  - [x] Tests: 9 test cases ✅
+- [x] **renew() Function** ✅
+  - [x] **Auto renew (useCurrentRate=false)**: Giữ nguyên locked rate ✅
+    - Status → AUTORENEWED
+    - Dù admin giảm % plan, vẫn dùng rate cũ
+  - [x] **Manual renew (useCurrentRate=true)**: Dùng current plan rate ✅
+    - Status → MANUALRENEWED
+    - Áp dụng lãi suất mới của plan
+  - [x] Mint new NFT for renewed deposit ✅
+  - [x] Tests: 12 test cases (auto + manual scenarios) ✅
+- [x] **setAutoRenew() Function** ✅
+  - [x] Toggle isAutoRenewEnabled flag
+  - [x] Only owner can change setting
+  - [x] Tests: 5 test cases ✅
 
-**Tối (2-3 giờ) - Kiểm Thử Phần 2:**
-- [ ] **Kiểm Thử Các Trường Hợp Đặc Biệt**
-  - [ ] Rút sớm + tính phạt tiền
-  - [ ] Các tình huống gia hạn (cùng/khác gói)
-  - [ ] Kho tiền không đủ số dư
-  - [ ] Vi phạm kiểm soát truy cập
-  - [ ] Nhiều người dùng cùng lúc
-- [ ] **Transfer Scenarios**
-  - [ ] Transfer NFT trước maturity
-  - [ ] Transfer NFT sau maturity
-  - [ ] Verify ownership + withdraw rights
+**Tối (2-3 giờ):** ✅
+- [x] **Security Audit** ✅
+  - [x] ReentrancyGuard: ✅ All external calls protected
+  - [x] Pausable: ✅ All user functions pausable  
+  - [x] AccessControl: ✅ Admin functions protected
+  - [x] Input Validation: ✅ All inputs validated
+  - [x] Custom Modifiers: ✅ planExists, depositExists, onlyDepositOwner
+- [x] **Code Quality** ✅
+  - [x] NatSpec documentation complete
+  - [x] Event emissions for all state changes
+  - [x] Gas optimization (contract size: 14.981 KB < 24 KB)
+  - [x] No compiler warnings
 
 ## 🚀 Thứ 5 (29/1) - Bảo Mật, Triển Khai & Tài Liệu
 
@@ -146,8 +161,12 @@
   - ✅ **Chiều (3-4 giờ)**: Chức năng quản trị + VaultManager + InterestCalculator + Tests (88 tests pass)
   - ✅ **Tối (2-3 giờ)**: Chức năng người dùng + SavingsBank tests (37 tests pass)
   - ✅ **TỔNG: 135/135 tests passing**
-- **Thứ 4**: ⏳ Chưa bắt đầu
-- **Thứ 5**: ⏳ Chưa bắt đầu
+- **Thứ 4**: ✅ **HOÀN THÀNH**
+  - ✅ **Sáng - ERC721 Integration**: ERC721Enumerable + Tests (15 tests)
+  - ✅ **Chiều - User Functions**: earlyWithdraw() + renew() + setAutoRenew() (26 tests)
+  - ✅ **Security Audit**: AccessControl + ReentrancyGuard + Validation
+  - ✅ **TỔNG: 176/176 tests passing** 🎉
+- **Thứ 5**: ⏳ Chưa bắt đầu - Deployment & Documentation
 
 ## 💡 Ghi Chú Quan Trọng
 
