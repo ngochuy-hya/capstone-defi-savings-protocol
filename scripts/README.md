@@ -1,270 +1,386 @@
-# Deployment Scripts
+# Test Scripts - DeFi Savings Protocol
 
-Comprehensive deployment scripts for DeFi Savings Protocol.
-
-## 📁 Structure
-
-```
-scripts/
-├── 01_deploy_mock_usdc.ts      # Deploy MockUSDC (testnet only)
-├── 02_deploy_savings_bank.ts   # Deploy SavingsBank
-├── deploy_all.ts                # Complete deployment (recommended)
-└── helpers/
-    ├── verify_deployment.ts     # Verify deployment health
-    └── test_deposit.ts          # Test full deposit lifecycle
-```
+Complete guide for testing the deployed protocol with **new architecture** (TokenVault + InterestVault + SavingsBank).
 
 ---
 
 ## 🚀 Quick Start
 
-### Deploy Everything (Recommended)
+### 1. Deploy Contracts
 
 ```bash
-# Local testing
-npx hardhat run scripts/deploy_all.ts --network hardhat
+npx hardhat deploy --reset
+```
+
+This will:
+- Deploy MockUSDC, TokenVault, InterestVault, MockDepositNFT, SavingsBank
+- Transfer ownership to SavingsBank
+- Fund InterestVault with 100,000 USDC
+- Create 3 saving plans (7, 30, 90 days)
+
+### 2. Run Test Scripts
+
+```bash
+# Check deployment status
+npx hardhat run scripts/01_check_deployment.ts
+
+# Open a deposit
+npx hardhat run scripts/02_open_deposit.ts
+
+# Check interest
+npx hardhat run scripts/03_check_interest.ts
+
+# Withdraw at maturity
+npx hardhat run scripts/04_withdraw_matured.ts
+
+# OR early withdraw
+npx hardhat run scripts/05_early_withdraw.ts
+
+# OR renew deposit
+npx hardhat run scripts/06_renew_deposit.ts
+
+# Check vault health
+npx hardhat run scripts/07_check_vault_health.ts
+```
+
+---
+
+## 📋 Script Details
+
+### Script 01: Check Deployment ✅
+
+**Purpose:** Verify all contracts deployed and configured correctly
+
+```bash
+npx hardhat run scripts/01_check_deployment.ts
+```
+
+**Shows:**
+- Contract addresses
+- Ownership configuration
+- Vault balances
+- Available plans
+- System status
+
+**Use when:** After deployment to verify everything is ready
+
+---
+
+### Script 02: Open Deposit 💵
+
+**Purpose:** Open a new savings deposit
+
+```bash
+npx hardhat run scripts/02_open_deposit.ts
+```
+
+**What it does:**
+- Mints USDC to user if needed
+- Approves TokenVault
+- Opens deposit with chosen plan
+- Mints NFT to user
+- Shows deposit details
+
+**Customize in script:**
+```typescript
+const planId = 2; // 1=7days, 2=30days, 3=90days
+const depositAmount = ethers.parseUnits("1000", 6); // Amount in USDC
+const enableAutoRenew = false; // Auto renew on maturity
+```
+
+**Architecture verification:**
+- ✅ Principal → TokenVault
+- ✅ Interest reserved → InterestVault
+- ✅ NFT minted
+
+---
+
+### Script 03: Check Interest 📊
+
+**Purpose:** Check accrued interest for a deposit
+
+```bash
+# Check deposit ID 1 (default)
+npx hardhat run scripts/03_check_interest.ts
+
+# Check specific deposit
+DEPOSIT_ID=2 npx hardhat run scripts/03_check_interest.ts
+```
+
+**Shows:**
+- Time progress (elapsed/remaining days)
+- Current accrued interest
+- Full interest at maturity
+- Withdrawal options comparison
+
+---
+
+### Script 04: Withdraw Matured 💸
+
+**Purpose:** Withdraw principal + interest at maturity
+
+```bash
+# Withdraw deposit ID 1 (default)
+npx hardhat run scripts/04_withdraw_matured.ts
+
+# Withdraw specific deposit
+DEPOSIT_ID=2 npx hardhat run scripts/04_withdraw_matured.ts
+```
+
+**Requirements:**
+- Deposit must be ACTIVE
+- Must have reached maturity
+
+**Architecture verification:**
+- ✅ Principal paid from TokenVault
+- ✅ Interest paid from InterestVault
+- ✅ Reserved funds released
+- ✅ NFT burned
+
+---
+
+### Script 05: Early Withdraw ⚠️
+
+**Purpose:** Withdraw before maturity (with penalty)
+
+```bash
+# Early withdraw deposit ID 1 (default)
+npx hardhat run scripts/05_early_withdraw.ts
+
+# Early withdraw specific deposit
+DEPOSIT_ID=2 npx hardhat run scripts/05_early_withdraw.ts
+```
+
+**What happens:**
+- User receives: Principal - Penalty
+- No interest paid (early withdrawal)
+- Penalty goes to InterestVault (boosts liquidity)
+
+**Architecture verification:**
+- ✅ Principal minus penalty from TokenVault
+- ✅ Penalty to InterestVault
+- ✅ Reserved interest released
+- ✅ NFT burned
+
+---
+
+### Script 06: Renew Deposit ♻️
+
+**Purpose:** Renew matured deposit (compound interest)
+
+```bash
+# Auto-renew (keep locked rate)
+npx hardhat run scripts/06_renew_deposit.ts
+
+# Manual renew (use current rate)
+USE_CURRENT_RATE=true npx hardhat run scripts/06_renew_deposit.ts
+
+# Renew to different plan
+NEW_PLAN_ID=3 npx hardhat run scripts/06_renew_deposit.ts
+
+# Renew specific deposit
+DEPOSIT_ID=2 npx hardhat run scripts/06_renew_deposit.ts
+```
+
+**Architecture flow:**
+1. Old interest released from InterestVault
+2. Interest transferred to TokenVault (joins principal)
+3. New principal = old principal + interest
+4. New interest reserved in InterestVault
+5. Old NFT burned, new NFT minted
+
+**Auto vs Manual:**
+- **Auto (`useCurrentRate=false`):** Keep original locked APR
+- **Manual (`useCurrentRate=true`):** Use current plan APR
+
+---
+
+### Script 07: Check Vault Health 🏥
+
+**Purpose:** Monitor system health and liquidity
+
+```bash
+npx hardhat run scripts/07_check_vault_health.ts
+```
+
+**Shows:**
+- TokenVault balance (principal)
+- InterestVault balance/reserved/available
+- Utilization rate
+- Total TVL (Total Value Locked)
+- Capital efficiency
+- Active plans
+- Recommendations
+
+---
+
+## 🎯 Common Workflows
+
+### Workflow 1: Complete User Journey
+
+```bash
+# 1. Check system ready
+npx hardhat run scripts/01_check_deployment.ts
+
+# 2. Open deposit
+npx hardhat run scripts/02_open_deposit.ts
+
+# 3. Check interest anytime
+npx hardhat run scripts/03_check_interest.ts
+
+# 4. Withdraw at maturity
+npx hardhat run scripts/04_withdraw_matured.ts
+```
+
+### Workflow 2: Test Early Withdrawal
+
+```bash
+# 1. Open deposit
+npx hardhat run scripts/02_open_deposit.ts
+
+# 2. Wait some time (or fast-forward in test)
+
+# 3. Early withdraw
+npx hardhat run scripts/05_early_withdraw.ts
+```
+
+### Workflow 3: Test Renewal
+
+```bash
+# 1. Open deposit
+npx hardhat run scripts/02_open_deposit.ts
+
+# 2. Wait until maturity (or fast-forward)
+
+# 3. Renew deposit
+npx hardhat run scripts/06_renew_deposit.ts
+
+# 4. Check new deposit
+DEPOSIT_ID=2 npx hardhat run scripts/03_check_interest.ts
+```
+
+### Workflow 4: Monitor System
+
+```bash
+# Check vault health regularly
+npx hardhat run scripts/07_check_vault_health.ts
+```
+
+---
+
+## 💡 Tips & Tricks
+
+### Using Environment Variables
+
+```bash
+# Specify deposit ID
+DEPOSIT_ID=3 npx hardhat run scripts/03_check_interest.ts
+
+# Manual renew with current rate
+DEPOSIT_ID=2 USE_CURRENT_RATE=true npx hardhat run scripts/06_renew_deposit.ts
+
+# Renew to different plan
+DEPOSIT_ID=1 NEW_PLAN_ID=3 npx hardhat run scripts/06_renew_deposit.ts
+```
+
+### Fast Forward Time (Testing Only)
+
+Add to any script for testing:
+
+```typescript
+// Fast forward 7 days
+await ethers.provider.send("evm_increaseTime", [7 * 24 * 60 * 60]);
+await ethers.provider.send("evm_mine", []);
+```
+
+### Network Selection
+
+```bash
+# Local hardhat network (default)
+npx hardhat run scripts/01_check_deployment.ts
+
+# Localhost (hardhat node)
+npx hardhat run scripts/01_check_deployment.ts --network localhost
 
 # Sepolia testnet
-npx hardhat run scripts/deploy_all.ts --network sepolia
-
-# With custom config
-INITIAL_VAULT_FUNDING=50000 npx hardhat run scripts/deploy_all.ts --network sepolia
-```
-
-### Step-by-Step Deployment
-
-```bash
-# 1. Deploy MockUSDC (testnet only)
-npx hardhat run scripts/01_deploy_mock_usdc.ts --network sepolia
-
-# 2. Deploy SavingsBank (set USDC_ADDRESS first)
-USDC_ADDRESS=0x... npx hardhat run scripts/02_deploy_savings_bank.ts --network sepolia
+npx hardhat run scripts/01_check_deployment.ts --network sepolia
 ```
 
 ---
 
-## ⚙️ Configuration
+## 🏗️ Architecture Verification
 
-### Environment Variables
+All scripts verify the new architecture:
 
-Create a `.env` file (copy from `.env_example`):
+### openDeposit (Script 02)
+- ✅ Principal → TokenVault
+- ✅ Interest reserved → InterestVault
+- ✅ NFT minted
 
-```bash
-# Required for testnet/mainnet
-TESTNET_PRIVATE_KEY=your_private_key_here
-ETHERSCAN_API_KEY=your_etherscan_api_key
+### withdraw (Script 04)
+- ✅ Principal ← TokenVault
+- ✅ Interest ← InterestVault
+- ✅ Reserves released
+- ✅ NFT burned
 
-# Optional - use existing USDC
-USDC_ADDRESS=0x...
+### earlyWithdraw (Script 05)
+- ✅ Principal - penalty ← TokenVault
+- ✅ Penalty → InterestVault
+- ✅ Reserves released
+- ✅ NFT burned
 
-# Optional - custom addresses
-FEE_RECEIVER=0x...
-ADMIN_ADDRESS=0x...
-
-# Optional - vault funding
-INITIAL_VAULT_FUNDING=100000
-SKIP_VAULT_FUNDING=false
-```
-
-### Initial Saving Plans
-
-Default plans in `deploy_all.ts`:
-
-| Plan | Tenor | APR | Min Deposit | Max Deposit | Penalty |
-|------|-------|-----|-------------|-------------|---------|
-| 1. Express | 7 days | 5% | 100 USDC | 10,000 USDC | 3% |
-| 2. Standard | 30 days | 8% | 500 USDC | 50,000 USDC | 5% |
-| 3. Premium | 90 days | 12% | 1,000 USDC | Unlimited | 7% |
-| 4. Elite | 180 days | 15% | 5,000 USDC | Unlimited | 10% |
-
-Edit `SAVING_PLANS` array to customize.
+### renew (Script 06)
+- ✅ Interest: InterestVault → TokenVault
+- ✅ New principal = old + interest (in TokenVault)
+- ✅ New interest reserved
+- ✅ Old NFT burned, new NFT minted
 
 ---
 
-## 🧪 Testing Deployment
+## 🐛 Troubleshooting
 
-### Verify Deployment
+### "Deposit not found"
+- Check deposit ID exists
+- Use script 01 to see all deposits
 
-```bash
-SAVINGS_BANK_ADDRESS=0x... npx hardhat run scripts/helpers/verify_deployment.ts --network sepolia
-```
+### "Deposit not active"
+- Deposit already withdrawn/renewed
+- Check status with script 03
 
-Checks:
-- ✅ Contract exists and accessible
-- ✅ ERC721 properties correct
-- ✅ Admin roles configured
-- ✅ Saving plans created
-- ✅ Vault balance
+### "Not yet matured"
+- Use script 05 for early withdrawal
+- Or wait until maturity
 
-### Test Full Lifecycle
+### "Already matured"
+- Use script 04 for normal withdrawal
+- Don't use early withdrawal
 
-```bash
-SAVINGS_BANK_ADDRESS=0x... npx hardhat run scripts/helpers/test_deposit.ts --network localhost
-```
-
-Tests:
-- ✅ Open deposit
-- ✅ Calculate interest
-- ✅ Withdraw at maturity
-- ✅ NFT minting & ownership
+### "Insufficient balance"
+- InterestVault needs more funds
+- Contact admin to fund vault
 
 ---
 
-## 🌐 Network Support
+## ✅ Test Checklist
 
-### Local Development
+After deployment, verify:
 
-```bash
-# Start local node
-npx hardhat node
-
-# Deploy (in another terminal)
-npx hardhat run scripts/deploy_all.ts --network localhost
-```
-
-### Sepolia Testnet
-
-```bash
-# Setup .env with TESTNET_PRIVATE_KEY
-
-# Get Sepolia ETH from faucet:
-# https://sepoliafaucet.com/
-
-# Deploy
-npx hardhat run scripts/deploy_all.ts --network sepolia
-
-# Verify on Etherscan
-npx hardhat verify --network sepolia <SAVINGS_BANK_ADDRESS> <USDC_ADDRESS> <FEE_RECEIVER> <ADMIN>
-```
-
-### Mainnet (Production)
-
-```bash
-# ⚠️ WARNING: Use multi-sig wallet for admin!
-# ⚠️ Get professional audit before mainnet deployment!
-
-# Setup .env with MAINNET_PRIVATE_KEY
-USDC_ADDRESS=0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 \
-FEE_RECEIVER=<multisig_address> \
-ADMIN_ADDRESS=<multisig_address> \
-npx hardhat run scripts/deploy_all.ts --network mainnet
-```
+- [ ] Script 01: System deployed correctly
+- [ ] Script 02: Deposit opens successfully
+- [ ] Script 03: Interest calculates correctly
+- [ ] Script 04: Normal withdrawal works
+- [ ] Script 05: Early withdrawal with penalty works
+- [ ] Script 06: Renewal compounds correctly
+- [ ] Script 07: Vault health check passes
 
 ---
 
-## 📝 Deployment Output
+## 📚 Related Documentation
 
-### Deployment Data
-
-Saved to `deployments/deployment-{chainId}-{timestamp}.json`:
-
-```json
-{
-  "network": "sepolia",
-  "chainId": "11155111",
-  "contracts": {
-    "usdc": "0x...",
-    "savingsBank": "0x..."
-  },
-  "config": {
-    "feeReceiver": "0x...",
-    "admin": "0x..."
-  },
-  "plans": [
-    {
-      "planId": 1,
-      "name": "7-Day Express",
-      "tenorDays": 7,
-      "aprPercent": 5
-    }
-  ]
-}
-```
-
-### Console Output
-
-```
-✅ MockUSDC deployed: 0x...
-✅ SavingsBank deployed: 0x...
-✅ Plans Created: 4
-✅ Vault funded: 100000.0 USDC
-```
+- `../deploy/` - Deployment scripts
+- `../docs/REFACTOR_SUMMARY.md` - Architecture overview
+- `../docs/TESTNET_DEPLOYMENT_GUIDE.md` - Testnet deployment
 
 ---
 
-## 🔧 Troubleshooting
-
-### "Insufficient funds"
-
-- Ensure deployer has enough ETH for gas
-- Testnet: Get ETH from faucet
-- Check balance: `await ethers.provider.getBalance(address)`
-
-### "Cannot mint MockUSDC"
-
-- MockUSDC.mint() is owner-only
-- Deployer must be the one who deployed MockUSDC
-- Alternative: Use `transfer()` from deployer balance
-
-### "Insufficient USDC for vault funding"
-
-- Deployer needs USDC balance
-- Option 1: Set `SKIP_VAULT_FUNDING=true`
-- Option 2: Fund vault manually after deployment
-- Option 3: Mint more MockUSDC first
-
-### "Network not configured"
-
-- Add network config to `hardhat.config.ts`
-- Ensure `TESTNET_PRIVATE_KEY` is set in `.env`
-
----
-
-## 📚 Additional Scripts
-
-### Create Custom Plan
-
-```typescript
-await savingsBank.createPlan(
-  30,                              // 30 days
-  800,                             // 8% APR (800 bps)
-  ethers.parseUnits("500", 6),    // Min: 500 USDC
-  ethers.parseUnits("50000", 6),  // Max: 50,000 USDC
-  500                              // 5% penalty
-);
-```
-
-### Fund Vault
-
-```typescript
-const amount = ethers.parseUnits("100000", 6);
-await usdc.approve(savingsBankAddress, amount);
-await savingsBank.fundVault(amount);
-```
-
-### Grant Admin Role
-
-```typescript
-const ADMIN_ROLE = await savingsBank.ADMIN_ROLE();
-await savingsBank.grantRole(ADMIN_ROLE, newAdminAddress);
-```
-
----
-
-## 🎯 Best Practices
-
-1. **Always test locally first** (`--network hardhat`)
-2. **Verify contracts on Etherscan** after testnet deployment
-3. **Use multi-sig wallet** for mainnet admin
-4. **Fund vault sufficiently** to cover interest payments
-5. **Monitor vault health** regularly
-6. **Get professional audit** before mainnet
-
----
-
-## 📞 Support
-
-For issues or questions, refer to:
-- [IMPLEMENTATION_PLAN.md](../docs/IMPLEMENTATION_PLAN.md)
-- [SECURITY_AUDIT.md](../docs/SECURITY_AUDIT.md)
-- [README.md](../README.md)
+*Scripts for New Architecture (TokenVault + InterestVault + SavingsBank) - Production Ready*

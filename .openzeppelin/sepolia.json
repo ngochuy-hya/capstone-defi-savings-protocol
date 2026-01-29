@@ -1,0 +1,335 @@
+{
+  "manifestVersion": "3.2",
+  "proxies": [
+    {
+      "address": "0x38bdAC0420d076cFF1F2cd1714f22b2fa93bbA79",
+      "txHash": "0x1dec2efff1ee5f06d35b0de4c14fdc8a762bcc73de92c723d0250efa6abf7b38",
+      "kind": "uups"
+    }
+  ],
+  "impls": {
+    "ef3fe77dce5b84084f153bae789d115f09075ce026af3333e379a5c6d1c30e50": {
+      "address": "0x154532Fe2FAb5fFD69C708F8C8115f64b7E51590",
+      "txHash": "0x0bcd0260a048a6f30630be5aa99bd27ce1b694b01c15dac506ea10d7878773bf",
+      "layout": {
+        "solcVersion": "0.8.28",
+        "storage": [
+          {
+            "label": "usdc",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_contract(IERC20)2282",
+            "contract": "SavingsBank",
+            "src": "contracts\\SavingsBank.sol:71"
+          },
+          {
+            "label": "tokenVault",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_contract(ITokenVault)12857",
+            "contract": "SavingsBank",
+            "src": "contracts\\SavingsBank.sol:74"
+          },
+          {
+            "label": "interestVault",
+            "offset": 0,
+            "slot": "2",
+            "type": "t_contract(IInterestVault)12771",
+            "contract": "SavingsBank",
+            "src": "contracts\\SavingsBank.sol:77"
+          },
+          {
+            "label": "depositNFT",
+            "offset": 0,
+            "slot": "3",
+            "type": "t_contract(IDepositNFT)12693",
+            "contract": "SavingsBank",
+            "src": "contracts\\SavingsBank.sol:80"
+          },
+          {
+            "label": "savingPlans",
+            "offset": 0,
+            "slot": "4",
+            "type": "t_mapping(t_uint256,t_struct(SavingPlan)11018_storage)",
+            "contract": "SavingsBank",
+            "src": "contracts\\SavingsBank.sol:83"
+          },
+          {
+            "label": "deposits",
+            "offset": 0,
+            "slot": "5",
+            "type": "t_mapping(t_uint256,t_struct(DepositCertificate)11033_storage)",
+            "contract": "SavingsBank",
+            "src": "contracts\\SavingsBank.sol:86"
+          },
+          {
+            "label": "nextPlanId",
+            "offset": 0,
+            "slot": "6",
+            "type": "t_uint256",
+            "contract": "SavingsBank",
+            "src": "contracts\\SavingsBank.sol:89"
+          },
+          {
+            "label": "nextDepositId",
+            "offset": 0,
+            "slot": "7",
+            "type": "t_uint256",
+            "contract": "SavingsBank",
+            "src": "contracts\\SavingsBank.sol:92"
+          }
+        ],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_struct(InitializableStorage)73_storage": {
+            "label": "struct Initializable.InitializableStorage",
+            "members": [
+              {
+                "label": "_initialized",
+                "type": "t_uint64",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "_initializing",
+                "type": "t_bool",
+                "offset": 8,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(OwnableStorage)13_storage": {
+            "label": "struct OwnableUpgradeable.OwnableStorage",
+            "members": [
+              {
+                "label": "_owner",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(PausableStorage)224_storage": {
+            "label": "struct PausableUpgradeable.PausableStorage",
+            "members": [
+              {
+                "label": "_paused",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(ReentrancyGuardStorage)288_storage": {
+            "label": "struct ReentrancyGuardUpgradeable.ReentrancyGuardStorage",
+            "members": [
+              {
+                "label": "_status",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_uint64": {
+            "label": "uint64",
+            "numberOfBytes": "8"
+          },
+          "t_contract(IDepositNFT)12693": {
+            "label": "contract IDepositNFT",
+            "numberOfBytes": "20"
+          },
+          "t_contract(IERC20)2282": {
+            "label": "contract IERC20",
+            "numberOfBytes": "20"
+          },
+          "t_contract(IInterestVault)12771": {
+            "label": "contract IInterestVault",
+            "numberOfBytes": "20"
+          },
+          "t_contract(ITokenVault)12857": {
+            "label": "contract ITokenVault",
+            "numberOfBytes": "20"
+          },
+          "t_mapping(t_uint256,t_struct(DepositCertificate)11033_storage)": {
+            "label": "mapping(uint256 => struct SavingsBank.DepositCertificate)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_uint256,t_struct(SavingPlan)11018_storage)": {
+            "label": "mapping(uint256 => struct SavingsBank.SavingPlan)",
+            "numberOfBytes": "32"
+          },
+          "t_string_storage": {
+            "label": "string",
+            "numberOfBytes": "32"
+          },
+          "t_struct(DepositCertificate)11033_storage": {
+            "label": "struct SavingsBank.DepositCertificate",
+            "members": [
+              {
+                "label": "planId",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "principal",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "startTime",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "maturityTime",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "lockedAprBps",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "4"
+              },
+              {
+                "label": "isAutoRenewEnabled",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "5"
+              },
+              {
+                "label": "status",
+                "type": "t_uint8",
+                "offset": 1,
+                "slot": "5"
+              }
+            ],
+            "numberOfBytes": "192"
+          },
+          "t_struct(SavingPlan)11018_storage": {
+            "label": "struct SavingsBank.SavingPlan",
+            "members": [
+              {
+                "label": "name",
+                "type": "t_string_storage",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "durationDays",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "minDeposit",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "maxDeposit",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "3"
+              },
+              {
+                "label": "aprBps",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "4"
+              },
+              {
+                "label": "earlyWithdrawPenaltyBps",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "5"
+              },
+              {
+                "label": "isActive",
+                "type": "t_bool",
+                "offset": 0,
+                "slot": "6"
+              }
+            ],
+            "numberOfBytes": "224"
+          },
+          "t_uint8": {
+            "label": "uint8",
+            "numberOfBytes": "1"
+          }
+        },
+        "namespaces": {
+          "erc7201:openzeppelin.storage.ReentrancyGuard": [
+            {
+              "contract": "ReentrancyGuardUpgradeable",
+              "label": "_status",
+              "type": "t_uint256",
+              "src": "@openzeppelin\\contracts-upgradeable\\utils\\ReentrancyGuardUpgradeable.sol:43",
+              "offset": 0,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Pausable": [
+            {
+              "contract": "PausableUpgradeable",
+              "label": "_paused",
+              "type": "t_bool",
+              "src": "@openzeppelin\\contracts-upgradeable\\utils\\PausableUpgradeable.sol:21",
+              "offset": 0,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Ownable": [
+            {
+              "contract": "OwnableUpgradeable",
+              "label": "_owner",
+              "type": "t_address",
+              "src": "@openzeppelin\\contracts-upgradeable\\access\\OwnableUpgradeable.sol:24",
+              "offset": 0,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Initializable": [
+            {
+              "contract": "Initializable",
+              "label": "_initialized",
+              "type": "t_uint64",
+              "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:69",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "Initializable",
+              "label": "_initializing",
+              "type": "t_bool",
+              "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:73",
+              "offset": 8,
+              "slot": "0"
+            }
+          ]
+        }
+      }
+    }
+  }
+}
