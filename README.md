@@ -2,87 +2,94 @@
 
 > **Capstone Project - Blockchain Development Internship**  
 > **Author:** Nguyễn Ngọc Huy - AppsCyclone  
-> **Timeline:** January 26-30, 2025
+> **Timeline:** January 26-30, 2026
 
-A decentralized savings protocol that brings traditional banking savings experience to blockchain - allowing users to open deposit certificates with fixed terms, earn interest, and manage their savings on-chain.
+Hệ thống tiết kiệm phi tập trung (DeFi) trên Ethereum: user mở sổ tiết kiệm có kỳ hạn, nhận lãi cố định, rút đúng hạn hoặc rút sớm (chịu phạt), tự động gia hạn (auto-renew) hoặc gửi lại thủ công (manual renew).
 
 ---
 
 ## 📋 Overview
 
-**DeFi Savings Protocol** is a smart contract system that mimics traditional bank savings accounts:
+**DeFi Savings Protocol** mô phỏng sổ tiết kiệm ngân hàng trên blockchain:
 
-- 💰 **Open Savings Deposits** - Choose from multiple saving plans (7/30/90/180 days)
-- 📈 **Earn Interest** - Get simple interest calculated based on APR and tenor
-- 🔄 **Flexible Withdrawal** - Withdraw at maturity or early (with penalty)
-- ♻️ **Renew/Rollover** - Automatically reinvest principal + interest to new term
-- 🎫 **NFT-like Certificates** - Each deposit is a unique certificate with transferable ownership
+- 💰 **Mở deposit** — Chọn plan (7 / 30 / 90 ngày), gửi USDC, nhận NFT chứng nhận
+- 📈 **Nhận lãi** — Lãi đơn theo APR và kỳ hạn
+- 💸 **Rút tiền** — Rút đúng hạn (gốc + lãi) hoặc rút sớm (gốc − phạt, không lãi)
+- ♻️ **Auto-renew** — Tự động gia hạn với **APR cũ (locked)** trong 2 ngày sau đáo hạn
+- 🔄 **Manual renew** — Rút rồi gửi lại với **APR mới** của plan
+- 🎫 **NFT certificate** — Mỗi deposit = 1 NFT (ERC721), tokenId = depositId
 
-### Key Features
+### Tech Stack
 
-- ✅ Multiple saving plans with different APR rates
-- ✅ Simple interest calculation (like traditional banks)
-- ✅ Early withdrawal with configurable penalty
-- ✅ Deposit renewal/rollover functionality
-- ✅ Admin-managed liquidity vault for interest payments
-- ✅ Access control and emergency pause mechanism
-- ✅ ReentrancyGuard protection
+- **Smart Contracts:** Solidity ^0.8.20
+- **Framework:** Hardhat, hardhat-deploy
+- **Testing:** Hardhat + Ethers.js
+- **Libraries:** OpenZeppelin Contracts
+- **Network:** Ethereum Sepolia Testnet (hoặc localhost)
 
 ---
 
-## 🏗️ Architecture
-### Current Architecture: Immutable Vaults + Orchestrator (TokenVault/InterestVault/NFT)
+## 🏗️ High Level Architecture
 
-This repository implements the **new architecture** with strict separation of concerns:
+Hệ thống gồm **một orchestrator (SavingsBank)** và **các vault/NFT tách biệt**. SavingsBank **không giữ token**; chỉ điều phối chuyển token giữa User, TokenVault và InterestVault.
 
-- **TokenVault.sol**: holds **principal** (user deposits) — immutable, simple, auditable
-- **InterestVault.sol**: holds **interest liquidity** + collects **penalties** — immutable, simple, auditable
-- **SavingsBank.sol**: **business logic only** (no token custody) — orchestrates vault transfers + plan/deposit state
-- **(Mock)DepositNFT.sol**: ERC721Enumerable used by SavingsBank for deposit ownership (on Sepolia we deploy `MockDepositNFT`)
+### Components
 
+| Component | Vai trò |
+|-----------|--------|
+| **SavingsBank** | Orchestrator: plan, deposit lifecycle, interest logic. Ownable, Pausable, ReentrancyGuard. **Không giữ token.** |
+| **TokenVault** | Giữ **principal** (gốc). Chỉ SavingsBank gọi deposit/withdraw. |
+| **InterestVault** | Giữ **liquidity trả lãi** + **penalty** rút sớm. reserve/release cho interest. Chỉ SavingsBank. |
+| **DepositNFT** | ERC721 đại diện quyền sở hữu deposit. Chỉ SavingsBank mint/burn. |
+| **MockUSDC / USDC** | Token gửi/rút (6 decimals). |
+
+### Architecture Diagram (Mermaid)
+
+```mermaid
+flowchart TB
+    User[User]
+    USDC[MockUSDC / USDC]
+    SB[SavingsBank]
+    TV[TokenVault\nPrincipal]
+    IV[InterestVault\nInterest + Penalties]
+    NFT[DepositNFT\nOwnership]
+
+    User -->|approve, openDeposit\nwithdraw, autoRenew| SB
+    SB -->|deposit / withdraw| TV
+    SB -->|deposit, withdraw\nreserve, release| IV
+    SB -->|mint, burn| NFT
+    USDC <-->|transfer| TV
+    USDC <-->|transfer| IV
+    TV -.->|onlyOwner| SB
+    IV -.->|onlyOwner| SB
+    NFT -.->|onlyOwner| SB
 ```
-User approves TokenVault
-        │
-        ▼
-┌──────────────┐        ┌──────────────┐
-│  TokenVault  │        │ InterestVault │
-│  principal   │        │ interest +    │
-│  (custody)   │        │ penalties     │
-└──────▲───────┘        └──────▲───────┘
-       │ onlyOwner               │ onlyOwner
-       └──────────────┬─────────┘
-                      ▼
-               ┌──────────────┐
-               │  SavingsBank │  (logic + state, no token custody)
-               └──────▲───────┘
-                      │ onlyOwner mint/burn
-                      ▼
-               ┌──────────────┐
-               │ DepositNFT   │ (currently: MockDepositNFT on Sepolia)
-               └──────────────┘
-```
 
-#### **InterestCalculator.sol** (Library)
-Pure functions for interest calculations:
-- 📈 Simple interest formula
-- ⏱️ Pro-rata interest for early withdrawal
-- 💸 Penalty calculations
-- 📊 Maturity estimations
+### Data Flow (tóm tắt)
 
-#### **MockUSDC.sol** (Test Token)
-ERC20 token with 6 decimals for testing (mimics real USDC)
+- **openDeposit:** User approve TokenVault → SavingsBank.openDeposit → Principal → TokenVault, Interest reserved → InterestVault, NFT mint → User.
+- **withdraw:** SavingsBank.release(interest) → InterestVault; TokenVault.withdraw(principal), InterestVault.withdraw(interest) → User; NFT burn.
+- **earlyWithdraw:** User nhận principal − penalty; penalty → InterestVault; reserved interest released; NFT burn.
+- **autoRenew:** Trong 2 ngày sau đáo hạn, nếu bật auto-renew: interest → compound vào principal mới, APR **locked**, NFT cũ burn, NFT mới mint.
 
-### Core Concepts
+### Access Control (tóm tắt)
 
-```
-Traditional Banking          →    Blockchain Implementation
-─────────────────────────────────────────────────────────────
-Saving Plans                 →    Struct with tenor/APR config
-Deposit Certificates         →    ERC721 NFT with unique ID
-Interest Payment             →    Simple interest from VaultManager
-Principal Storage            →    Held in SavingsBank contract
-Bank Manager                 →    Admin role with AccessControl
-```
+- **SavingsBank:** Owner = Admin. Admin: createPlan, updatePlan, enablePlan, fundVault, withdrawVault, pause, unpause.
+- **TokenVault, InterestVault, DepositNFT:** Owner = SavingsBank. Chỉ SavingsBank gọi deposit/withdraw/reserve/release/mint/burn.
+- **User:** openDeposit, withdraw, earlyWithdraw, autoRenew, setAutoRenew (nếu là owner của NFT).
+
+📖 **Chi tiết:** [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) — High Level Architecture, Components, Data Flow, Access Control (đầy đủ).
+
+---
+
+## 📂 Documentation
+
+| Tài liệu | Nội dung |
+|----------|----------|
+| **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)** | High Level Architecture, Components, Data Flow, Access Control, diagram |
+| **[docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md)** | Deploy: env, thứ tự deploy, fresh deploy, verify |
+| **[docs/SCRIPTS.md](./docs/SCRIPTS.md)** | Scripts: deploy, test-deployment, helpers |
+| **[scripts/test-deployment/README.md](./scripts/test-deployment/README.md)** | Hướng dẫn chạy test script sau deploy |
 
 ---
 
@@ -90,181 +97,98 @@ Bank Manager                 →    Admin role with AccessControl
 
 ### Prerequisites
 
-- Node.js v16+ and Yarn
-- Hardhat development environment
-- MetaMask or similar Web3 wallet
+- Node.js v16+
+- Yarn hoặc npm
+- Private key (Sepolia) — không commit
 
-### Installation
+### Install
 
 ```bash
-# Clone repository
 git clone <repository-url>
 cd capstone-defi-savings-protocol
-
-# Install dependencies
 yarn install
-
-# Copy environment file
 cp .env_example .env
-# Fill in your private keys and RPC URLs
+# Điền TESTNET_PRIVATE_KEY (và ETHERSCAN_API_KEY nếu cần)
 ```
 
-### Compile Contracts
+### Compile & Test
 
 ```bash
-yarn hardhat compile
+npx hardhat compile
+npx hardhat test
 ```
 
-### Run Tests
+### Deploy (Sepolia)
 
 ```bash
-# Run all tests
-yarn test
-
-# Run with gas reporting
-REPORT_GAS=1 yarn test
-
-# Check coverage
-yarn hardhat coverage
-```
-
-### Deploy to Testnet
-
-```bash
-# Deploy all contracts (hardhat-deploy)
 npx hardhat deploy --network sepolia
+```
 
-# Sanity check: ownership, balances, plans
-npx hardhat run scripts/01_check_deployment.ts --network sepolia
+Sau deploy: chạy script kiểm tra (xem [docs/SCRIPTS.md](./docs/SCRIPTS.md)):
+
+```bash
+npx hardhat run scripts/test-deployment/00_check_deployment.ts --network sepolia
+npx hardhat run scripts/test-deployment/01_setup_verification.ts --network sepolia
 ```
 
 ---
 
-## 📊 Deployed Contracts
+## 📊 Deployed Contracts (Sepolia)
 
-> **Status:** ✅ **LIVE ON SEPOLIA TESTNET** (new architecture)
+Sau khi deploy, địa chỉ lưu tại `deployments/sepolia/`. Có thể xem bằng:
 
-### Sepolia Testnet
-- **MockUSDC**: `0x5f89720026332AC218F3f832dE3b7488222aDE9C`
-- **TokenVault**: `0xEF08c572e314e0BAbf781C82B5775EAD68c789d4`
-- **InterestVault**: `0xAaa46e0dE3CA6031dDD391da653FCedF5cb32a84`
-- **MockDepositNFT**: `0xdD4572634915c7aa789CCD03af9d6dB0Fd61E690`
-- **SavingsBank**: `0xbf18558adf6BA008eA2c6924D50e980C998313f0`
-
-📖 See architecture docs in `docs_ver2/`.
-
----
-
-## 🎮 Usage Example
-
-### For Users
-
-```solidity
-// 1. Approve TokenVault (principal is pulled by TokenVault.deposit(from, amount))
-mockUSDC.approve(tokenVault, 10000 * 10**6);
-
-// 2. Open a deposit (planId, amount, enableAutoRenew)
-uint256 tokenId = savingsBank.openDeposit(2, 10000 * 10**6, false);
-
-// 3. Wait until maturity
-// ...
-
-// 4. Withdraw at maturity (tokenId == depositId)
-savingsBank.withdraw(tokenId);
-```
-
-### For Admins
-
-```solidity
-// Create new saving plan
-savingsBank.createPlan(
-    "90 Days",    // name
-    90,           // durationDays
-    1000 * 10**6, // min deposit: 1,000 USDC
-    0,            // max deposit: (use MaxUint256 in practice for "no limit")
-    1000,         // aprBps: 10%
-    500           // earlyWithdrawPenaltyBps: 5%
-);
-
-// Enable/disable plan
-savingsBank.enablePlan(1, true);
-
-// Fund interest vault (requires approval to InterestVault first)
-savingsBank.fundVault(100000 * 10**6);
+```bash
+npx hardhat run scripts/test-deployment/00_check_deployment.ts --network sepolia
 ```
 
 ---
 
-## 📚 Documentation
+## 🎮 Usage (User)
 
-- **[IMPLEMENTATION_PLAN.md](./docs/IMPLEMENTATION_PLAN.md)** - Detailed technical specifications and implementation plan
-- **[TASKS.md](./docs/TASKS.md)** - Daily task breakdown and progress tracking
-- **Walkthrough.md** - Coming soon (deployment guide with screenshots)
+1. **Approve USDC cho TokenVault**
+2. **openDeposit(planId, amount, enableAutoRenew)** → nhận NFT (tokenId = depositId)
+3. **Sau đáo hạn:** withdraw(tokenId) hoặc autoRenew(tokenId) (nếu bật, trong 2 ngày)
+4. **Rút sớm:** earlyWithdraw(tokenId) — nhận gốc − phạt, không lãi
+
+Admin: createPlan, fundVault, updatePlan, enablePlan, pause/unpause — xem [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md).
 
 ---
 
 ## 🛡️ Security
 
-### Security Features
-- ✅ OpenZeppelin's `Ownable` for admin permissions
-- ✅ OpenZeppelin's `ReentrancyGuard` to prevent reentrancy attacks
-- ✅ OpenZeppelin's `Pausable` for emergency stops
-- ✅ Input validation on all public functions
-- ✅ Safe math operations (Solidity 0.8+)
+- ReentrancyGuard trên hàm gọi vault/transfer
+- Pausable (admin)
+- Vault tách biệt, chỉ SavingsBank điều khiển
+- SavingsBank không giữ token
+- Auto-renew lock APR bảo vệ user khi admin đổi plan
 
-### Security Audit
-- 🔍 Self-audit checklist completed
-- 🔍 Slither static analysis planned
-- ⚠️ **Note**: This is a capstone project and has NOT been professionally audited. DO NOT use in production with real funds.
+⚠️ Dự án capstone, chưa audit chuyên nghiệp. Không dùng với tiền thật.
 
 ---
 
 ## 🧪 Testing
 
-Comprehensive test suite covering:
-- ✅ Plan management (create, update, enable/disable)
-- ✅ Deposit lifecycle (open, withdraw, early withdraw, renew)
-- ✅ Interest calculation accuracy
-- ✅ Access control and permissions
-- ✅ Edge cases and error scenarios
-- ✅ Multi-user concurrent operations
+- Unit tests: `test/unit/` (SavingsBank, InterestCalculator, MockUSDC)
+- Test script sau deploy: `scripts/test-deployment/`
 
-**Target Coverage:** ≥ 95%
-
----
-
-## 🛠️ Tech Stack
-
-- **Smart Contracts**: Solidity ^0.8.20
-- **Framework**: Hardhat
-- **Testing**: Hardhat + Ethers.js
-- **Libraries**: OpenZeppelin Contracts v5
-- **Network**: Ethereum Sepolia Testnet
-- **Token Standard**: ERC20 (USDC), ERC721-like deposits
+```bash
+npx hardhat test
+npx hardhat run scripts/test-deployment/99_full_e2e_test.ts   # localhost (full E2E)
+```
 
 ---
 
 ## 📝 License
 
-This project is for educational purposes as part of a blockchain development internship capstone project.
+Dự án giáo dục — Capstone Blockchain Development Internship.
 
 ---
 
 ## 👨‍💻 Author
 
-**Nguyễn Ngọc Huy**  
-Blockchain Development Intern - AppsCyclone  
-Capstone Project - January 2025
+**Nguyễn Ngọc Huy** — Blockchain Development Intern, AppsCyclone — January 2025
 
 ---
 
-## 🙏 Acknowledgments
-
-- OpenZeppelin for secure smart contract libraries
-- Hardhat team for excellent development tools
-- AppsCyclone for internship opportunity and guidance
-
----
-
-> **Project Status:** ✅ Blockchain Complete - Ready for Frontend Integration  
-> **Last Updated:** January 29, 2026
+> **Status:** ✅ Blockchain hoàn thiện — Sẵn sàng tích hợp frontend  
+> **Last Updated:** January 2026

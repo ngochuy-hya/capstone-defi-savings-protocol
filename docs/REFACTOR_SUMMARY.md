@@ -239,10 +239,10 @@ MockUSDC (ERC20)
 
 ## 📚 DOCUMENTATION
 
-- ✅ Architecture: `docs_ver2/ARCHITECTURE_V3_FINAL.md`
-- ✅ File Structure: `docs_ver2/FILE_STRUCTURE.md`
-- ✅ Implementation Plan: `docs_ver2/IMPLEMENTATION_PLAN_VER2.md`
-- ✅ This Summary: `REFACTOR_SUMMARY.md`
+- ✅ Architecture: [ARCHITECTURE.md](./ARCHITECTURE.md)
+- ✅ Deployment: [DEPLOYMENT.md](./DEPLOYMENT.md)
+- ✅ Scripts: [SCRIPTS.md](./SCRIPTS.md)
+- ✅ This Summary: [REFACTOR_SUMMARY.md](./REFACTOR_SUMMARY.md)
 
 ---
 

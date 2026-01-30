@@ -1,20 +1,19 @@
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 import { DeployFunction } from "hardhat-deploy/types";
 
-const deployMockUSDC: DeployFunction = async (hre: HardhatRuntimeEnvironment) => {
+const deploy: DeployFunction = async (hre: HardhatRuntimeEnvironment) => {
   const { deployments, getNamedAccounts } = hre;
   const { deploy, log } = deployments;
   const { deployer } = await getNamedAccounts();
 
-  const result = await deploy("MockUSDC", {
+  const result = await deploy("MockDepositNFT", {
     from: deployer,
     args: [],
     log: true,
     waitConfirmations: 1,
   });
-
-  log("MockUSDC:", result.address);
+  log("MockDepositNFT:", result.address);
 };
 
-export default deployMockUSDC;
-deployMockUSDC.tags = ["MockUSDC", "all"];
+export default deploy;
+deploy.tags = ["MockDepositNFT", "all"];

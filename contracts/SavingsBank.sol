@@ -18,11 +18,25 @@ import "./libraries/InterestCalculator.sol";
  * 
  * Key Features:
  * - Plan management (create, update, enable/disable)
- * - Deposit operations (open, withdraw, earlyWithdraw, renew)
+ * - Deposit operations (open, withdraw, earlyWithdraw, autoRenew)
  * - Admin vault management (fund, withdraw)
  * - Interest calculation using InterestCalculator library
- * - Auto-renew and manual renew logic
+ * - Auto-renew with LOCKED APR protection
+ * - Grace period mechanism (2 days after maturity)
  * - Pause/unpause functionality
+ * 
+ * Renewal Mechanisms:
+ * 1. AUTO-RENEW (via autoRenew function):
+ *    - Triggered within grace period (2 days after maturity)
+ *    - Locks OLD APR rate (protects user from admin changes)
+ *    - Compounds interest (newPrincipal = oldPrincipal + interest)
+ *    - Can be called by user or automation (Chainlink/Gelato)
+ * 
+ * 2. MANUAL RENEW (withdraw + openDeposit):
+ *    - User withdraws principal + interest
+ *    - User creates new deposit with NEW plan params
+ *    - Uses CURRENT APR and duration from plan
+ *    - Flexible amount (not tied to previous deposit)
  * 
  * Architecture:
  * - TokenVault: holds principal deposits (IMMUTABLE)
@@ -90,6 +104,7 @@ contract SavingsBank is
 
     uint256 public constant BPS_DENOMINATOR = 10_000;
     uint256 public constant SECONDS_PER_YEAR = 365 days;
+    uint256 public constant AUTO_RENEW_GRACE_PERIOD = 2 days;  // Window for auto-renew after maturity
 
     // Status constants
     uint8 public constant STATUS_ACTIVE = 0;
@@ -116,10 +131,11 @@ contract SavingsBank is
         uint256 interest,
         bool isEarly
     );
-    event Renewed(
+    event AutoRenewed(
         uint256 indexed oldDepositId,
         uint256 indexed newDepositId,
-        uint256 newPrincipal
+        uint256 newPrincipal,
+        uint256 lockedAprBps
     );
     event VaultFunded(uint256 amount);
     event VaultWithdrawn(uint256 amount);
@@ -326,6 +342,11 @@ contract SavingsBank is
 
     /**
      * @dev Withdraw at maturity
+     * @notice User can withdraw anytime after maturity, even after grace period expires.
+     *         If auto-renew is enabled and within grace period, user must decide:
+     *         - Call withdraw() to take funds (prevents auto-renew)
+     *         - Call autoRenew() to compound interest (locks old APR)
+     *         - Do nothing and let automation trigger autoRenew()
      * @param tokenId NFT token ID (same as depositId)
      */
     function withdraw(uint256 tokenId) external nonReentrant whenNotPaused {
@@ -403,23 +424,33 @@ contract SavingsBank is
     }
 
     /**
-     * @dev Renew deposit
+     * @dev Auto-renew deposit with LOCKED APR and duration
+     * @notice This function implements the auto-renew mechanism:
+     *         - Only works within grace period (2 days after maturity)
+     *         - Locks the OLD APR rate (protection against admin changes)
+     *         - Compounds interest (new principal = old principal + interest)
+     *         - Can be called by user manually or by automation (Chainlink/Gelato)
      * @param tokenId NFT token ID
-     * @param useCurrentRate If true, use current plan params; if false, use locked params (auto-renew)
-     * @param newPlanId New plan ID (0 = same plan)
+     * @return newDepositId New deposit ID after renewal
      */
-    function renew(
-        uint256 tokenId,
-        bool useCurrentRate,
-        uint256 newPlanId
-    ) external nonReentrant whenNotPaused returns (uint256) {
+    function autoRenew(uint256 tokenId)
+        external
+        nonReentrant
+        whenNotPaused
+        returns (uint256)
+    {
         uint256 depositId = tokenId;
         address owner = depositNFT.ownerOf(tokenId);
         require(owner == msg.sender, "SavingsBank: Not owner");
 
         DepositCertificate storage oldCert = deposits[depositId];
         require(oldCert.status == STATUS_ACTIVE, "SavingsBank: Not active");
+        require(oldCert.isAutoRenewEnabled, "SavingsBank: Auto-renew not enabled");
         require(block.timestamp >= oldCert.maturityTime, "SavingsBank: Not matured");
+        require(
+            block.timestamp <= oldCert.maturityTime + AUTO_RENEW_GRACE_PERIOD,
+            "SavingsBank: Grace period expired"
+        );
 
         // Calculate interest using library
         uint256 duration = oldCert.maturityTime - oldCert.startTime;
@@ -427,37 +458,26 @@ contract SavingsBank is
         uint256 interest = oldCert.principal.calculateInterest(oldCert.lockedAprBps, durationDays);
         uint256 newPrincipal = oldCert.principal + interest;
 
+        // Get original plan to get duration (duration doesn't change on auto-renew)
+        SavingPlan memory originalPlan = savingPlans[oldCert.planId];
+        require(originalPlan.durationDays > 0, "SavingsBank: Invalid plan");
+
+        // Validate new principal against current plan limits
+        require(newPrincipal >= originalPlan.minDeposit, "SavingsBank: Below minDeposit");
+        require(newPrincipal <= originalPlan.maxDeposit, "SavingsBank: Above maxDeposit");
+
+        // AUTO-RENEW: Lock OLD APR and duration (regardless of admin updates)
+        uint256 lockedAprBps = oldCert.lockedAprBps;
+        uint256 lockedDurationDays = originalPlan.durationDays;
+
         // Release old reserved interest
         interestVault.release(interest);
 
-        // Determine new plan
-        uint256 targetPlanId = (newPlanId == 0) ? oldCert.planId : newPlanId;
-        require(targetPlanId < nextPlanId, "SavingsBank: Plan not found");
-
-        SavingPlan memory newPlan = savingPlans[targetPlanId];
-        require(newPlan.isActive, "SavingsBank: Plan not active");
-        require(newPrincipal >= newPlan.minDeposit, "SavingsBank: Below minDeposit");
-        require(newPrincipal <= newPlan.maxDeposit, "SavingsBank: Above maxDeposit");
-
-        // Determine APR and duration
-        uint256 newAprBps;
-        uint256 newDurationDays;
-
-        if (!useCurrentRate) {
-            // Auto-renew: use locked params
-            newAprBps = oldCert.lockedAprBps;
-            newDurationDays = savingPlans[oldCert.planId].durationDays;
-        } else {
-            // Manual renew: use current plan params
-            newAprBps = newPlan.aprBps;
-            newDurationDays = newPlan.durationDays;
-        }
-
         // Calculate new maturity time
-        uint256 newMaturityTime = block.timestamp + (newDurationDays * 1 days);
+        uint256 newMaturityTime = block.timestamp + (lockedDurationDays * 1 days);
 
-        // Reserve new interest using library
-        uint256 newEstimatedInterest = newPrincipal.calculateInterest(newAprBps, newDurationDays);
+        // Reserve new interest using LOCKED APR
+        uint256 newEstimatedInterest = newPrincipal.calculateInterest(lockedAprBps, lockedDurationDays);
         interestVault.reserve(newEstimatedInterest);
 
         // Transfer interest from InterestVault to TokenVault (compound interest)
@@ -471,22 +491,22 @@ contract SavingsBank is
         // Burn old NFT
         depositNFT.burn(tokenId);
 
-        // Create new deposit
+        // Create new deposit with LOCKED APR
         uint256 newDepositId = nextDepositId++;
         deposits[newDepositId] = DepositCertificate({
-            planId: targetPlanId,
+            planId: oldCert.planId,  // Keep same plan ID
             principal: newPrincipal,
             startTime: block.timestamp,
             maturityTime: newMaturityTime,
-            lockedAprBps: newAprBps,
-            isAutoRenewEnabled: oldCert.isAutoRenewEnabled,
+            lockedAprBps: lockedAprBps,  // LOCKED APR (protection for user)
+            isAutoRenewEnabled: oldCert.isAutoRenewEnabled,  // Preserve setting
             status: STATUS_ACTIVE
         });
 
         // Mint new NFT
         depositNFT.mint(msg.sender);
 
-        emit Renewed(depositId, newDepositId, newPrincipal);
+        emit AutoRenewed(depositId, newDepositId, newPrincipal, lockedAprBps);
 
         return newDepositId;
     }
@@ -505,6 +525,72 @@ contract SavingsBank is
         require(cert.status == STATUS_ACTIVE, "SavingsBank: Not active");
 
         cert.isAutoRenewEnabled = enabled;
+    }
+
+    /**
+     * @dev Check if deposit needs auto-renew (for Chainlink Automation / Gelato)
+     * @param depositId Deposit ID to check
+     * @return upkeepNeeded True if deposit should be auto-renewed
+     * @return performData Encoded data for performAutoRenew (depositId)
+     */
+    function checkAutoRenew(uint256 depositId)
+        external
+        view
+        returns (bool upkeepNeeded, bytes memory performData)
+    {
+        // Check if deposit exists and has an NFT owner
+        if (depositId >= nextDepositId) {
+            return (false, "");
+        }
+
+        DepositCertificate memory cert = deposits[depositId];
+
+        // Check all conditions for auto-renew
+        upkeepNeeded = (
+            cert.status == STATUS_ACTIVE &&
+            cert.isAutoRenewEnabled &&
+            block.timestamp >= cert.maturityTime &&
+            block.timestamp <= cert.maturityTime + AUTO_RENEW_GRACE_PERIOD
+        );
+
+        if (upkeepNeeded) {
+            performData = abi.encode(depositId);
+        }
+
+        return (upkeepNeeded, performData);
+    }
+
+    /**
+     * @dev Batch check multiple deposits for auto-renew
+     * @param depositIds Array of deposit IDs to check
+     * @return needsRenewal Array of booleans indicating which deposits need renewal
+     */
+    function checkAutoRenewBatch(uint256[] calldata depositIds)
+        external
+        view
+        returns (bool[] memory needsRenewal)
+    {
+        needsRenewal = new bool[](depositIds.length);
+
+        for (uint256 i = 0; i < depositIds.length; i++) {
+            uint256 depositId = depositIds[i];
+
+            if (depositId >= nextDepositId) {
+                needsRenewal[i] = false;
+                continue;
+            }
+
+            DepositCertificate memory cert = deposits[depositId];
+
+            needsRenewal[i] = (
+                cert.status == STATUS_ACTIVE &&
+                cert.isAutoRenewEnabled &&
+                block.timestamp >= cert.maturityTime &&
+                block.timestamp <= cert.maturityTime + AUTO_RENEW_GRACE_PERIOD
+            );
+        }
+
+        return needsRenewal;
     }
 
     // ================== VIEW FUNCTIONS ====================
@@ -609,6 +695,43 @@ contract SavingsBank is
             cert.isAutoRenewEnabled,
             cert.status
         );
+    }
+
+    /**
+     * @dev Check deposit status and eligibility for operations
+     * @param depositId Deposit ID
+     * @return canWithdraw True if can withdraw normally
+     * @return canAutoRenew True if can auto-renew (within grace period)
+     * @return isMatured True if deposit has matured
+     * @return gracePeriodExpired True if grace period has passed
+     */
+    function getDepositStatus(uint256 depositId)
+        external
+        view
+        returns (
+            bool canWithdraw,
+            bool canAutoRenew,
+            bool isMatured,
+            bool gracePeriodExpired
+        )
+    {
+        DepositCertificate memory cert = deposits[depositId];
+
+        isMatured = block.timestamp >= cert.maturityTime;
+        gracePeriodExpired = block.timestamp > cert.maturityTime + AUTO_RENEW_GRACE_PERIOD;
+
+        // Can withdraw if active and matured
+        canWithdraw = (cert.status == STATUS_ACTIVE && isMatured);
+
+        // Can auto-renew if active, auto-renew enabled, matured, and within grace period
+        canAutoRenew = (
+            cert.status == STATUS_ACTIVE &&
+            cert.isAutoRenewEnabled &&
+            isMatured &&
+            !gracePeriodExpired
+        );
+
+        return (canWithdraw, canAutoRenew, isMatured, gracePeriodExpired);
     }
 }
 

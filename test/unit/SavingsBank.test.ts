@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { ethers, upgrades } from "hardhat";
+import { ethers } from "hardhat";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 import {
   MockUSDC,
@@ -10,8 +10,8 @@ import {
 } from "../../typechain";
 
 /**
- * Comprehensive SavingsBank tests for the new architecture:
- * MockUSDC + TokenVault + InterestVault + MockDepositNFT + SavingsBank (UUPS).
+ * SavingsBank unit tests (localhost).
+ * MockUSDC + TokenVault + InterestVault + MockDepositNFT + SavingsBank.
  */
 describe("SavingsBank (Pragmatic SOLID)", function () {
   let usdc: MockUSDC;
@@ -429,21 +429,19 @@ describe("SavingsBank (Pragmatic SOLID)", function () {
     });
   });
 
-  describe("renew()", function () {
+  describe("autoRenew()", function () {
     beforeEach(async function () {
       await savingsBank.connect(user1).openDeposit(2, ethers.parseUnits("10000", 6), true);
     });
 
-    it("Should auto renew successfully with locked rate", async function () {
+    it("Should auto-renew successfully with locked APR", async function () {
       await time.increase(30 * 24 * 60 * 60);
 
-      await savingsBank.connect(user1).renew(1, false, 0);
+      await savingsBank.connect(user1).autoRenew(1);
 
-      // Old deposit should be RENEWED
       const [, , , , , , oldStatus] = await savingsBank.getDepositDetails(1);
       expect(oldStatus).to.equal(3); // RENEWED
 
-      // New deposit should exist
       const [, newPrincipal, , , , , newStatus] = await savingsBank.getDepositDetails(2);
       expect(newStatus).to.equal(0); // ACTIVE
       expect(newPrincipal).to.be.gt(ethers.parseUnits("10000", 6));
@@ -451,9 +449,24 @@ describe("SavingsBank (Pragmatic SOLID)", function () {
 
     it("Should revert if not yet matured", async function () {
       await time.increase(15 * 24 * 60 * 60);
-
-      await expect(savingsBank.connect(user1).renew(1, false, 0)).to.be.revertedWith(
+      await expect(savingsBank.connect(user1).autoRenew(1)).to.be.revertedWith(
         "SavingsBank: Not matured"
+      );
+    });
+
+    it("Should revert if auto-renew not enabled", async function () {
+      await savingsBank.connect(user1).openDeposit(2, ethers.parseUnits("5000", 6), false);
+      await time.increase(30 * 24 * 60 * 60);
+      await expect(savingsBank.connect(user1).autoRenew(2)).to.be.revertedWith(
+        "SavingsBank: Auto-renew not enabled"
+      );
+    });
+
+    it("Should revert if grace period expired", async function () {
+      const GRACE_PERIOD = 2 * 24 * 60 * 60;
+      await time.increase(30 * 24 * 60 * 60 + GRACE_PERIOD + 1);
+      await expect(savingsBank.connect(user1).autoRenew(1)).to.be.revertedWith(
+        "SavingsBank: Grace period expired"
       );
     });
   });

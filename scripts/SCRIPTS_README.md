@@ -392,7 +392,7 @@ All scripts verify Method 2 architecture:
 ## 📚 Related Documentation
 
 - [METHOD2_ARCHITECTURE.md](../docs/METHOD2_ARCHITECTURE.md) - Detailed architecture
-- [METHOD2_REFACTOR_SUMMARY.md](../docs/METHOD2_REFACTOR_SUMMARY.md) - Refactor summary
+- [REFACTOR_SUMMARY.md](../docs/REFACTOR_SUMMARY.md) - Refactor summary
 - [DEPLOYMENT_SUCCESS.md](../docs/DEPLOYMENT_SUCCESS.md) - Testnet deployment guide
 
 ---

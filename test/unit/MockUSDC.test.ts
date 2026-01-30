@@ -4,8 +4,8 @@ import { MockUSDC } from "../../typechain";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
 
 /**
- * Basic tests for MockUSDC in the new architecture.
- * MockUSDC is a simple ERC20 with 6 decimals and a public mint function.
+ * MockUSDC unit tests (localhost).
+ * ERC20 with 6 decimals and public mint.
  */
 describe("MockUSDC", function () {
   let mockUSDC: MockUSDC;

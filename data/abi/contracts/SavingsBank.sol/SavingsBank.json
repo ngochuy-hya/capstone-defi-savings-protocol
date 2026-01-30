@@ -67,6 +67,37 @@
         "inputs": [
             {
                 "indexed": true,
+                "internalType": "uint256",
+                "name": "oldDepositId",
+                "type": "uint256"
+            },
+            {
+                "indexed": true,
+                "internalType": "uint256",
+                "name": "newDepositId",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "newPrincipal",
+                "type": "uint256"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "lockedAprBps",
+                "type": "uint256"
+            }
+        ],
+        "name": "AutoRenewed",
+        "type": "event"
+    },
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
                 "internalType": "address",
                 "name": "newDepositNFT",
                 "type": "address"
@@ -199,31 +230,6 @@
         "anonymous": false,
         "inputs": [
             {
-                "indexed": true,
-                "internalType": "uint256",
-                "name": "oldDepositId",
-                "type": "uint256"
-            },
-            {
-                "indexed": true,
-                "internalType": "uint256",
-                "name": "newDepositId",
-                "type": "uint256"
-            },
-            {
-                "indexed": false,
-                "internalType": "uint256",
-                "name": "newPrincipal",
-                "type": "uint256"
-            }
-        ],
-        "name": "Renewed",
-        "type": "event"
-    },
-    {
-        "anonymous": false,
-        "inputs": [
-            {
                 "indexed": false,
                 "internalType": "address",
                 "name": "account",
@@ -295,6 +301,19 @@
         ],
         "name": "Withdrawn",
         "type": "event"
+    },
+    {
+        "inputs": [],
+        "name": "AUTO_RENEW_GRACE_PERIOD",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
     },
     {
         "inputs": [],
@@ -375,6 +394,25 @@
         "type": "function"
     },
     {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "tokenId",
+                "type": "uint256"
+            }
+        ],
+        "name": "autoRenew",
+        "outputs": [
+            {
+                "internalType": "uint256",
+                "name": "",
+                "type": "uint256"
+            }
+        ],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+    {
         "inputs": [],
         "name": "availableVaultBalance",
         "outputs": [
@@ -425,6 +463,49 @@
                 "internalType": "uint256",
                 "name": "interest",
                 "type": "uint256"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
+                "name": "depositId",
+                "type": "uint256"
+            }
+        ],
+        "name": "checkAutoRenew",
+        "outputs": [
+            {
+                "internalType": "bool",
+                "name": "upkeepNeeded",
+                "type": "bool"
+            },
+            {
+                "internalType": "bytes",
+                "name": "performData",
+                "type": "bytes"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256[]",
+                "name": "depositIds",
+                "type": "uint256[]"
+            }
+        ],
+        "name": "checkAutoRenewBatch",
+        "outputs": [
+            {
+                "internalType": "bool[]",
+                "name": "needsRenewal",
+                "type": "bool[]"
             }
         ],
         "stateMutability": "view",
@@ -633,6 +714,40 @@
         "inputs": [
             {
                 "internalType": "uint256",
+                "name": "depositId",
+                "type": "uint256"
+            }
+        ],
+        "name": "getDepositStatus",
+        "outputs": [
+            {
+                "internalType": "bool",
+                "name": "canWithdraw",
+                "type": "bool"
+            },
+            {
+                "internalType": "bool",
+                "name": "canAutoRenew",
+                "type": "bool"
+            },
+            {
+                "internalType": "bool",
+                "name": "isMatured",
+                "type": "bool"
+            },
+            {
+                "internalType": "bool",
+                "name": "gracePeriodExpired",
+                "type": "bool"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "uint256",
                 "name": "planId",
                 "type": "uint256"
             }
@@ -766,35 +881,6 @@
             }
         ],
         "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [
-            {
-                "internalType": "uint256",
-                "name": "tokenId",
-                "type": "uint256"
-            },
-            {
-                "internalType": "bool",
-                "name": "useCurrentRate",
-                "type": "bool"
-            },
-            {
-                "internalType": "uint256",
-                "name": "newPlanId",
-                "type": "uint256"
-            }
-        ],
-        "name": "renew",
-        "outputs": [
-            {
-                "internalType": "uint256",
-                "name": "",
-                "type": "uint256"
-            }
-        ],
-        "stateMutability": "nonpayable",
         "type": "function"
     },
     {

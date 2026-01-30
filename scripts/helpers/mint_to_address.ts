@@ -30,8 +30,14 @@ async function main() {
 
   const amount = ethers.parseUnits(AMOUNT_USDC, 6);
 
-  // Get MockUSDC
-  const MockUSDC = await deployments.get("MockUSDC");
+  let MockUSDC: { address: string };
+  try {
+    MockUSDC = await deployments.get("MockUSDC");
+  } catch {
+    console.log("⚠️  MockUSDC chưa deploy trên network này. Chạy deploy trước:");
+    console.log("   npx hardhat deploy --network sepolia");
+    process.exit(1);
+  }
   const mockUSDC = await ethers.getContractAt("MockUSDC", MockUSDC.address);
 
   console.log("\n📌 MockUSDC:", MockUSDC.address);

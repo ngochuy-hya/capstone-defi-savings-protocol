@@ -2,8 +2,8 @@ import { expect } from "chai";
 import { ethers } from "hardhat";
 
 /**
- * Tests for the simplified InterestCalculator library
- * via the TestInterestCalculator wrapper contract.
+ * InterestCalculator library tests (localhost).
+ * Uses TestInterestCalculator wrapper contract.
  */
 describe("InterestCalculator", function () {
   let testContract: any;
