@@ -6,7 +6,7 @@
 
 ---
 
-## 🎯 FINAL ARCHITECTURE DECISION
+## 🎯 FINAL ARCHITECTURE DECISION (IMPLEMENTED IN THIS REPO)
 
 ### **Pragmatic SOLID: 6 Contracts**
 
@@ -15,7 +15,7 @@
 ├── 2. TokenVault.sol        (Immutable - giữ deposits)
 ├── 3. InterestVault.sol     (Immutable - giữ interest)
 ├── 4. DepositNFT.sol        (Immutable - ownership)
-├── 5. SavingsBank.sol       (UUPS Upgradeable - logic + state)
+├── 5. SavingsBank.sol       (Ownable/Pausable/ReentrancyGuard - logic + state)
 └── 6. InterestCalculator.sol (Library - pure math)
 ```
 
@@ -33,12 +33,10 @@ Vaults = IMMUTABLE (~50 lines each)
 → Funds always safe
 ```
 
-**2. Upgrade flexibility ✅**
+**2. Upgradeability note**
 ```
-SavingsBank = UUPS Proxy
-→ Logic bug? Deploy V2, upgrade proxy
-→ Storage preserved
-→ Vaults unchanged
+Current implementation: SavingsBank is deployed directly (no proxy/UUPS).
+If you want upgradeability later: add a proxy layer, keep vaults immutable.
 ```
 
 **3. Simplicity ✅**
@@ -65,7 +63,7 @@ Pattern used by:
 |--------|------------------|---|
 | **Contracts** | 5 | 6 |
 | **Token Safety** | ⚠️ At risk | ✅ Immutable vaults |
-| **Upgradeability** | ❌ No | ✅ UUPS proxy |
+| **Upgradeability** | ❌ No | ⚠️ Direct deploy now (proxy optional later) |
 | **Lines of Code** | ~1,200 | ~1,150 |
 | **Deploy Cost** | $$ | $$$ (one-time) |
 | **Audit Time** | 1-2 weeks | 1-2 weeks |
@@ -82,9 +80,9 @@ InterestVault.sol    → Giữ interest pool
 DepositNFT.sol       → ERC721 ownership
 ```
 
-### **Layer 2: Upgradeable Logic**
+### **Layer 2: Business Logic**
 ```
-SavingsBank.sol (UUPS Proxy)
+SavingsBank.sol (direct deployment)
 └── Plan management
 └── Deposit operations
 └── Withdraw operations (normal + early)
@@ -102,27 +100,17 @@ MockUSDC.sol          → Test token
 
 ## 🚀 DEPLOYMENT
 
-### **Initial Deploy:**
+### **Initial Deploy (current repo):**
 ```bash
 1. Deploy Vaults (immutable)
-2. Deploy NFT (immutable)
-3. Deploy SavingsBank Implementation
-4. Deploy UUPS Proxy → This is the address users use!
-5. Transfer ownership to proxy
+2. Deploy DepositNFT/MockDepositNFT
+3. Deploy SavingsBank (constructor wires dependencies)
+4. Transfer ownership to SavingsBank
 6. Initialize system
 ```
 
-### **When Need Upgrade:**
-```bash
-1. pause()
-2. Deploy SavingsBankV2
-3. proxy.upgradeTo(v2)
-4. unpause()
-
-✅ Vaults unchanged
-✅ NFT unchanged
-✅ Storage preserved
-```
+### **When need an upgrade (future idea):**
+Add a proxy layer and migrate in a controlled way; vaults remain immutable.
 
 ---
 
@@ -131,11 +119,11 @@ MockUSDC.sol          → Test token
 ```
 contracts/
 ├── mocks/MockUSDC.sol
-├── core/
-│   ├── TokenVault.sol     (50 lines)
-│   ├── InterestVault.sol  (70 lines)
-│   └── DepositNFT.sol     (300 lines)
-├── SavingsBank.sol        (600 lines)
+├── TokenVault.sol         (immutable vault)
+├── InterestVault.sol      (immutable vault)
+├── DepositNFT.sol         (production NFT)
+├── mocks/MockDepositNFT.sol (used by current deploy scripts)
+├── SavingsBank.sol        (business logic)
 ├── interfaces/...
 └── libraries/InterestCalculator.sol
 ```
@@ -148,7 +136,7 @@ contracts/
    - MockUSDC
    - TokenVault, InterestVault
    - DepositNFT
-   - SavingsBank (UUPS)
+   - SavingsBank
    - InterestCalculator
 
 2. **Testing** (Phase 2)

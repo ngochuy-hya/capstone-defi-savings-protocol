@@ -31,52 +31,36 @@ A decentralized savings protocol that brings traditional banking savings experie
 ---
 
 ## 🏗️ Architecture
+### Current Architecture: Immutable Vaults + Orchestrator (TokenVault/InterestVault/NFT)
 
-### Method 2: Separated Principal & Interest 🎯
+This repository implements the **new architecture** with strict separation of concerns:
 
-This protocol implements a **production-grade architecture** with clear separation between user funds and protocol obligations:
+- **TokenVault.sol**: holds **principal** (user deposits) — immutable, simple, auditable
+- **InterestVault.sol**: holds **interest liquidity** + collects **penalties** — immutable, simple, auditable
+- **SavingsBank.sol**: **business logic only** (no token custody) — orchestrates vault transfers + plan/deposit state
+- **(Mock)DepositNFT.sol**: ERC721Enumerable used by SavingsBank for deposit ownership (on Sepolia we deploy `MockDepositNFT`)
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                  METHOD 2 ARCHITECTURE                       │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  ┌────────────────────┐          ┌────────────────────┐    │
-│  │   SavingsBank      │          │   VaultManager     │    │
-│  │                    │          │                    │    │
-│  │  Holds:            │          │  Holds:            │    │
-│  │  ✓ User Principal  │          │  ✓ Interest Pool   │    │
-│  │  ✓ User Deposits   │          │  ✓ Reserved Funds  │    │
-│  └────────────────────┘          └────────────────────┘    │
-│           │                                │                │
-│           ▼                                ▼                │
-│    User Principal                  Interest Payments       │
-│    (Customer Assets)               (Protocol Obligation)   │
-└─────────────────────────────────────────────────────────────┘
+User approves TokenVault
+        │
+        ▼
+┌──────────────┐        ┌──────────────┐
+│  TokenVault  │        │ InterestVault │
+│  principal   │        │ interest +    │
+│  (custody)   │        │ penalties     │
+└──────▲───────┘        └──────▲───────┘
+       │ onlyOwner               │ onlyOwner
+       └──────────────┬─────────┘
+                      ▼
+               ┌──────────────┐
+               │  SavingsBank │  (logic + state, no token custody)
+               └──────▲───────┘
+                      │ onlyOwner mint/burn
+                      ▼
+               ┌──────────────┐
+               │ DepositNFT   │ (currently: MockDepositNFT on Sepolia)
+               └──────────────┘
 ```
-
-**Key Benefits:**
-- 🔒 **User principal protected** - Held separately in SavingsBank
-- 💰 **Capital efficient** - VaultManager only needs ~2-10% of TVL for interest
-- 📊 **Clear accounting** - Easy to audit and verify solvency
-- 🛡️ **Regulatory friendly** - Clear segregation of customer funds
-
-### Smart Contracts
-
-#### **SavingsBank.sol** (Main Contract)
-Core contract handling all savings operations:
-- 👤 **User deposits** - Holds all principal (customer funds)
-- 📋 **Plan management** - Admin creates/updates saving plans
-- 🎫 **ERC721 Integration** - Deposit certificates as transferrable NFTs
-- 💵 **Withdraw logic** - Principal from SavingsBank, interest from VaultManager
-- ♻️ **Renewal** - Interest compounds into principal
-
-#### **VaultManager.sol** (Interest Pool Manager)
-Manages protocol liquidity for interest payments:
-- 💰 **Interest reserves** - Reserve funds for expected interest
-- 🏦 **Liquidity pool** - Admin funds vault for interest payments
-- 📊 **Health monitoring** - Track vault solvency (120% minimum ratio)
-- 🔐 **Access control** - Only SavingsBank can reserve/release/transfer
 
 #### **InterestCalculator.sol** (Library)
 Pure functions for interest calculations:
@@ -147,27 +131,27 @@ yarn hardhat coverage
 ### Deploy to Testnet
 
 ```bash
-# Deploy to Sepolia (all contracts)
-npx hardhat run scripts/deploy_sepolia.ts --network sepolia
+# Deploy all contracts (hardhat-deploy)
+npx hardhat deploy --network sepolia
 
-# Verify contracts on Etherscan
-npx hardhat verify --network sepolia 0xC62464eaD63c27aE68B296522837e923f856fe05
-npx hardhat verify --network sepolia 0x870d756E4Ec6745C24CE3DAD776cC53ddB51ae62 "0xC62464eaD63c27aE68B296522837e923f856fe05" "0x7Fd5E1B5954B00027cA0C2FC152449411089BF1d" 12000
-npx hardhat verify --network sepolia 0xB95742736EDeE68c9cb3F9a44D3F04D96F40d7d4 "0xC62464eaD63c27aE68B296522837e923f856fe05" "0x870d756E4Ec6745C24CE3DAD776cC53ddB51ae62" "0x7Fd5E1B5954B00027cA0C2FC152449411089BF1d" "0x7Fd5E1B5954B00027cA0C2FC152449411089BF1d"
+# Sanity check: ownership, balances, plans
+npx hardhat run scripts/01_check_deployment.ts --network sepolia
 ```
 
 ---
 
 ## 📊 Deployed Contracts
 
-> **Status:** ✅ **LIVE ON SEPOLIA TESTNET** - All contracts deployed and verified!
+> **Status:** ✅ **LIVE ON SEPOLIA TESTNET** (new architecture)
 
 ### Sepolia Testnet
-- **MockUSDC**: [`0xC62464eaD63c27aE68B296522837e923f856fe05`](https://sepolia.etherscan.io/address/0xC62464eaD63c27aE68B296522837e923f856fe05#code)
-- **VaultManager**: [`0x870d756E4Ec6745C24CE3DAD776cC53ddB51ae62`](https://sepolia.etherscan.io/address/0x870d756E4Ec6745C24CE3DAD776cC53ddB51ae62#code)
-- **SavingsBank**: [`0xB95742736EDeE68c9cb3F9a44D3F04D96F40d7d4`](https://sepolia.etherscan.io/address/0xB95742736EDeE68c9cb3F9a44D3F04D96F40d7d4#code)
+- **MockUSDC**: `0x5f89720026332AC218F3f832dE3b7488222aDE9C`
+- **TokenVault**: `0xEF08c572e314e0BAbf781C82B5775EAD68c789d4`
+- **InterestVault**: `0xAaa46e0dE3CA6031dDD391da653FCedF5cb32a84`
+- **MockDepositNFT**: `0xdD4572634915c7aa789CCD03af9d6dB0Fd61E690`
+- **SavingsBank**: `0xbf18558adf6BA008eA2c6924D50e980C998313f0`
 
-📖 **[View Full Deployment Details](./docs/SEPOLIA_DEPLOYMENT.md)**
+📖 See architecture docs in `docs_ver2/`.
 
 ---
 
@@ -176,34 +160,37 @@ npx hardhat verify --network sepolia 0xB95742736EDeE68c9cb3F9a44D3F04D96F40d7d4 
 ### For Users
 
 ```solidity
-// 1. Approve USDC spending
-mockUSDC.approve(savingsBank, 10000 * 10**6);
+// 1. Approve TokenVault (principal is pulled by TokenVault.deposit(from, amount))
+mockUSDC.approve(tokenVault, 10000 * 10**6);
 
-// 2. Open a 30-day deposit with 10,000 USDC
-uint256 depositId = savingsBank.openDeposit(1, 10000 * 10**6);
+// 2. Open a deposit (planId, amount, enableAutoRenew)
+uint256 tokenId = savingsBank.openDeposit(2, 10000 * 10**6, false);
 
-// 3. Wait until maturity (30 days)
+// 3. Wait until maturity
 // ...
 
-// 4. Withdraw principal + interest
-savingsBank.withdraw(depositId);
-// Receives: 10,000 USDC + ~65.75 USDC interest (8% APR)
+// 4. Withdraw at maturity (tokenId == depositId)
+savingsBank.withdraw(tokenId);
 ```
 
 ### For Admins
 
 ```solidity
-// Create new saving plan: 90 days, 10% APR
+// Create new saving plan
 savingsBank.createPlan(
-    90 days,      // tenor
-    1000,         // 10% APR in basis points
+    "90 Days",    // name
+    90,           // durationDays
     1000 * 10**6, // min deposit: 1,000 USDC
-    0,            // max deposit: unlimited
-    500           // early penalty: 5%
+    0,            // max deposit: (use MaxUint256 in practice for "no limit")
+    1000,         // aprBps: 10%
+    500           // earlyWithdrawPenaltyBps: 5%
 );
 
-// Fund vault to ensure liquidity for interest payments
-savingsBank.fundVault(100000 * 10**6); // 100k USDC
+// Enable/disable plan
+savingsBank.enablePlan(1, true);
+
+// Fund interest vault (requires approval to InterestVault first)
+savingsBank.fundVault(100000 * 10**6);
 ```
 
 ---
@@ -219,7 +206,7 @@ savingsBank.fundVault(100000 * 10**6); // 100k USDC
 ## 🛡️ Security
 
 ### Security Features
-- ✅ OpenZeppelin's `AccessControl` for role-based permissions
+- ✅ OpenZeppelin's `Ownable` for admin permissions
 - ✅ OpenZeppelin's `ReentrancyGuard` to prevent reentrancy attacks
 - ✅ OpenZeppelin's `Pausable` for emergency stops
 - ✅ Input validation on all public functions

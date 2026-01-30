@@ -283,26 +283,22 @@ Step 3: Deploy InterestVault
   → Constructor(usdcAddress)
   → InterestVault address: 0xCCC...
 
-Step 4: Deploy SavingsBank
-  → Constructor(
-      usdcAddress,
-      tokenVaultAddress,
-      interestVaultAddress,
-      adminAddress,
-      feeReceiverAddress   // optional; penalty → InterestVault
-    )
+Step 4: Deploy DepositNFT (or MockDepositNFT)
+  → DepositNFT constructor needs SavingsBank address (production contract),
+    so current deploy scripts use MockDepositNFT to keep wiring simple.
+
+Step 5: Deploy SavingsBank
+  → Constructor(usdcAddress, tokenVaultAddress, interestVaultAddress, depositNFTAddress)
   → SavingsBank address: 0xDDD...
 
 Step 5: Transfer ownership of vaults
   → TokenVault.transferOwnership(savingsBankAddress)
   → InterestVault.transferOwnership(savingsBankAddress)
 
-Step 6: Deploy DepositNFT
-  → Constructor(savingsBankAddress)
-  → DepositNFT address: 0xEEE...
-
-Step 7: Set DepositNFT in SavingsBank
-  → SavingsBank.setDepositNFT(depositNFTAddress)
+Step 6: Transfer ownership of vaults + NFT to SavingsBank
+  → TokenVault.transferOwnership(savingsBankAddress)
+  → InterestVault.transferOwnership(savingsBankAddress)
+  → DepositNFT/MockDepositNFT.transferOwnership(savingsBankAddress)
 
 Step 8: Create saving plans
   → SavingsBank.createPlan("Flexible 30D", 30, 100e6, 1000000e6, 500, 100)
@@ -310,7 +306,7 @@ Step 8: Create saving plans
   → SavingsBank.createPlan("Premium 180D", 180, 1000e6, 10000000e6, 1200, 25)
 
 Step 9: Fund interest vault
-  → MockUSDC.approve(SavingsBank, 100000e6)
+  → MockUSDC.approve(InterestVault, 100000e6)
   → SavingsBank.fundVault(100000e6)
 ```
 
@@ -334,7 +330,7 @@ Step 2: User opens deposit
 Step 3: SavingsBank processes
   ├─ Validate plan exists and active
   ├─ Validate amount >= minDeposit && <= maxDeposit
-  ├─ maturityAt = block.timestamp + (plan.tenorDays * 1 days)
+  ├─ maturityAt = block.timestamp + (plan.durationDays * 1 days)
   ├─ Calculate estimated interest: 1000 * 5% * 30/365 = 4.11 USDC
   ├─ Reserve interest: totalReservedInterest += 4.11e6
   ├─ TokenVault.deposit(user, 1000e6)
@@ -928,7 +924,9 @@ async function main() {
 
   // 9. Fund vault
   await usdc.mint(deployer.address, ethers.parseUnits("100000", 6));
-  await usdc.approve(await savingsBank.getAddress(), ethers.parseUnits("100000", 6));
+  // InterestVault pulls funds from deployer inside InterestVault.deposit(from, amount)
+  // so the deployer must approve InterestVault (not SavingsBank).
+  await usdc.approve(await interestVault.getAddress(), ethers.parseUnits("100000", 6));
   await savingsBank.fundVault(ethers.parseUnits("100000", 6));
   console.log("Vault funded with 100,000 USDC");
 
@@ -980,7 +978,7 @@ main().catch((error) => {
 7. **Security First**
    - ReentrancyGuard
    - Pausable
-   - AccessControl
+   - Ownable
    - Checks-Effects-Interactions
 
 ---

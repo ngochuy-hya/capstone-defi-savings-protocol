@@ -34,13 +34,12 @@ contracts/
 │
 ├── 📁 mocks/                           ← Test Mocks
 │   └── 📄 MockUSDC.sol                 (100 lines) ERC20, 6 decimals, mint
+│   └── 📄 MockDepositNFT.sol            (minimal ERC721Enumerable for deployments)
 │
-├── 📁 core/                            ← Core Immutable Contracts
-│   ├── 📄 TokenVault.sol               (50 lines) Immutable vault giữ deposits
-│   ├── 📄 InterestVault.sol            (70 lines) Immutable vault giữ interest pool
-│   └── 📄 DepositNFT.sol               (300 lines) ERC721, Data URI metadata
-│
-├── � SavingsBank.sol                  (600 lines) UUPS Upgradeable Logic + State
+├── 📄 TokenVault.sol                   (immutable) holds principal
+├── 📄 InterestVault.sol                (immutable) holds interest + penalties
+├── 📄 DepositNFT.sol                   (production) on-chain metadata
+├── 📄 SavingsBank.sol                  (direct deployment) logic + state
 │
 ├── � interfaces/
 │   ├── 📄 ITokenVault.sol
@@ -59,7 +58,7 @@ Total: 6 contracts
 ├── TokenVault:         ~50  lines (IMMUTABLE)
 ├── InterestVault:      ~70  lines (IMMUTABLE)
 ├── DepositNFT:         ~300 lines (IMMUTABLE)
-├── SavingsBank:        ~600 lines (UPGRADEABLE via UUPS)
+├── SavingsBank:        ~600 lines (direct deployment)
 └── InterestCalculator: ~30  lines (library)
                         ─────
 Total LOC:              ~1,150 lines
@@ -115,38 +114,11 @@ test/
 ```
 deploy/
 │
-├── 📄 01_deploy_mock.ts                ← Deploy MockUSDC
-│   - Deploy MockUSDC(name, symbol, decimals)
-│   - Mint initial supply for testing
-│
-├── 📄 02_deploy_vaults.ts              ← Deploy Immutable Vaults
-│   - Deploy TokenVault(usdc)
-│   - Deploy InterestVault(usdc)
-│
-├── 📄 03_deploy_nft.ts                 ← Deploy DepositNFT
-│   - Deploy DepositNFT()
-│
-├── 📄 04_deploy_savings_bank.ts        ← Deploy SavingsBank (UUPS Proxy)
-│   - Deploy SavingsBank Implementation
-│   - Encode initialize(usdc, tokenVault, interestVault, depositNFT)
-│   - Deploy ERC1967Proxy(implementation, initData)
-│   - Save proxy address as SavingsBank
-│
-├── 📄 05_setup_ownership.ts            ← Transfer Ownership
-│   - tokenVault.transferOwnership(savingsBank)
-│   - interestVault.transferOwnership(savingsBank)
-│   - depositNFT.transferOwnership(savingsBank)
-│
-├── 📄 06_configure_system.ts           ← Configure Connections
-│   - depositNFT.setSavingsBank(savingsBank)
-│   - Verify all connections
-│
-└── 📄 07_initialize_data.ts            ← Create Plans & Fund
-    - savingsBank.createPlan("3 Months", 90, ...)
-    - savingsBank.createPlan("6 Months", 180, ...)
-    - savingsBank.createPlan("12 Months", 365, ...)
-    - savingsBank.fundVault(1000000 * 1e6)
-    - Log all addresses
+├── 📄 01_deploy_mock_usdc.ts           ← Deploy MockUSDC
+├── 📄 02_deploy_vaults.ts              ← Deploy TokenVault + InterestVault
+├── 📄 03_deploy_savings_bank.ts        ← Deploy MockDepositNFT + SavingsBank (constructor wires deps)
+├── 📄 04_setup_ownership.ts            ← Transfer vault/NFT ownership to SavingsBank
+└── 📄 05_configure_system.ts           ← Fund InterestVault + create initial plans
 ```
 
 ---
@@ -156,27 +128,15 @@ deploy/
 ```
 scripts/
 │
-├── 📄 verify.ts                        ← Verify on Etherscan
-│   - Verify all deployed contracts
-│   - Pass constructor/init arguments
-│
-├── 📄 upgrade.ts                       ← Upgrade SavingsBank
-│   - Deploy SavingsBankV2
-│   - savingsBank.upgradeTo(v2Address)
-│   - Test upgrade success
-│   - Verify state preserved
-│
-├── 📄 fund-vault.ts                    ← Fund InterestVault
-│   - Admin funds interest pool
-│   - Check available balance
-│
-├── 📄 create-plan.ts                   ← Create New Plan
-│   - Helper to create/update plans
-│   - Validate parameters
-│
-└── 📄 interact.ts                      ← Manual Interaction
+├── 📄 01_check_deployment.ts           ← Check ownership/balances/plans
+├── 📄 02_open_deposit.ts               ← Open deposit
+├── 📄 03_check_interest.ts             ← Check interest
+├── 📄 04_withdraw_matured.ts           ← Withdraw matured
+├── 📄 05_early_withdraw.ts             ← Early withdraw
+├── 📄 06_renew_deposit.ts              ← Renew deposit
+└── 📄 07_check_vault_health.ts         ← Vault health overview
     User functions:
-    - usdc.approve(savingsBank, amount)
+    - usdc.approve(tokenVault, amount)
     - savingsBank.openDeposit(planId, amount, autoRenew)
     - savingsBank.withdraw(depositId)
     - savingsBank.earlyWithdraw(depositId)
@@ -197,21 +157,13 @@ scripts/
 ```
 docs_ver2/
 │
-├── 📄 ARCHITECTURE_V3_FINAL.md         ← Main Architecture (THIS DOC)
-│   - 6-contract Pragmatic SOLID design
-│   - UUPS proxy pattern
-│   - Complete contract code
-│   - Deployment & upgrade flows
-│
+├── 📄 DEFI_SAVINGS_ARCHITECTURE_FINAL.md ← Canonical architecture/workflows (current)
 ├── 📄 FILE_STRUCTURE.md                ← This File
 │   - Complete directory tree
 │   - File organization
 │
-├── 📄 PLAN.md                          ← Implementation Plan
-│   - Phased approach
-│   - Task checklist
-│   - Timeline estimates
-│
+├── 📄 IMPLEMENTATION_PLAN_VER2.md       ← Implementation plan (current)
+├── 📄 TASKS_VER2.md                     ← Task checklist (current)
 ├── 📄 DEPLOYMENT_GUIDE.md              ← Deployment Instructions
 │   (To be created)
 │
@@ -237,18 +189,7 @@ data/
 │   ├── 📄 SavingsBank.json
 │   └── 📄 InterestCalculator.json
 │
-├── 📄 addresses.json                   ← Deployed Addresses
-│   {
-│     "sepolia": {
-│       "MockUSDC": "0x...",
-│       "TokenVault": "0x...",
-│       "InterestVault": "0x...",
-│       "DepositNFT": "0x...",
-│       "SavingsBank": "0x...",        // Proxy address!
-│       "SavingsBank_Implementation": "0x..."
-│     }
-│   }
-│
+├── (deployments files are generated by hardhat-deploy and ignored by git)
 └── 📄 deployment-info.json
 ```
 
@@ -260,7 +201,6 @@ data/
 ```typescript
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
-import "@openzeppelin/hardhat-upgrades";  // For UUPS proxy
 import "hardhat-deploy";
 
 const config: HardhatUserConfig = {
@@ -300,8 +240,7 @@ export default config;
     "test:integration": "hardhat test test/integration/**/*.test.ts",
     "deploy:local": "hardhat deploy --network hardhat",
     "deploy:sepolia": "hardhat deploy --network sepolia",
-    "upgrade": "hardhat run scripts/upgrade.ts --network sepolia",
-    "verify": "hardhat run scripts/verify.ts --network sepolia"
+    "verify": "hardhat --version"
   },
   "dependencies": {
     "@openzeppelin/contracts": "^5.0.0",
@@ -309,7 +248,6 @@ export default config;
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^4.0.0",
-    "@openzeppelin/hardhat-upgrades": "^3.0.0",
     "hardhat": "^2.19.0",
     "hardhat-deploy": "^0.11.45"
   }
@@ -356,14 +294,14 @@ Data/Config:        4 files
 
 ✅ Kept: TokenVault, InterestVault (CRITICAL for token safety)
 ✅ Kept: DepositNFT (CRITICAL for ownership independence)
-✅ Upgraded: SavingsBank to UUPS proxy (replaces coordinator + logic contracts)
+✅ SavingsBank orchestrates logic + state (direct deployment)
 ```
 
 ### **Benefits:**
 - ✅ **50% fewer contracts** (6 vs 10)
 - ✅ **50% less deployment cost**
 - ✅ **Easier to audit** (~1,150 lines vs ~1,800 lines)
-- ✅ **Still upgradeable** (UUPS proxy)
+- ⚠️ **Upgradeability** (optional later via proxy layer)
 - ✅ **Still token-safe** (immutable vaults)
 
 ---
@@ -380,7 +318,7 @@ Data/Config:        4 files
    - DepositNFT.sol
 
 3. **Main Logic** (4-5 hours)
-   - SavingsBank.sol (UUPS upgradeable)
+   - SavingsBank.sol
 
 4. **Interfaces** (30 min)
    - ITokenVault.sol

@@ -275,8 +275,8 @@ app.get('/nft/:tokenId/metadata', async (req, res) => {
   const { tokenId } = req.params;
   
   // 1. Get onchain data
-  const depositData = await contract.getDeposit(tokenId);
-  const planData = await contract.getPlan(depositData.planId);
+  const depositData = await contract.getDepositDetails(tokenId);
+  const planData = await contract.savingPlans(depositData.planId);
   
   // 2. Get offchain metadata
   const planMetadata = await fetchFromIPFS(planData.metadataHash);
@@ -409,7 +409,7 @@ app.get('/nft/:tokenId/metadata', async (req, res) => {
   try {
     // Get onchain data
     const deposit = await contract.getDepositDetails(tokenId);
-    const plan = await contract.getPlan(deposit.planId);
+    const plan = await contract.savingPlans(deposit.planId);
     const planName = await contract.getPlanName(deposit.planId);
     
     // Calculate dynamic values
