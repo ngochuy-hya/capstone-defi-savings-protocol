@@ -94,6 +94,9 @@ contract SavingsBank is
     /// @dev Deposit certificates mapping (depositId => certificate)
     mapping(uint256 => DepositCertificate) public deposits;
 
+    /// @dev Original owner per deposit (so admin can see owner after NFT is burned)
+    mapping(uint256 => address) public depositOwner;
+
     /// @dev Next plan ID
     uint256 public nextPlanId;
 
@@ -331,6 +334,8 @@ contract SavingsBank is
             isAutoRenewEnabled: enableAutoRenew,
             status: STATUS_ACTIVE
         });
+
+        depositOwner[depositId] = msg.sender;
 
         // Mint NFT to user
         depositNFT.mint(msg.sender);

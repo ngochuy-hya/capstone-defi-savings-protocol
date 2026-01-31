@@ -98,63 +98,205 @@ flowchart TB
 
 ## 3. Data Flow
 
+Tất cả luồng đều qua **SavingsBank**; SavingsBank gọi TokenVault / InterestVault / DepositNFT (onlyOwner). USDC luôn chuyển qua vault, không qua SavingsBank.
+
 ### 3.1 User Deposit (openDeposit)
+
+**Điều kiện:** Plan active, amount ∈ [minDeposit, maxDeposit], InterestVault có đủ available balance, User đã approve TokenVault.
 
 ```
 User                    SavingsBank                 TokenVault              InterestVault           DepositNFT
   |                          |                           |                        |                     |
-  | approve(TokenVault)      |                           |                        |                     |
+  | approve(TokenVault, amount)                           |                        |                     |
+  |------------------------------------------------------->| (off-chain / trước)    |                     |
+  | openDeposit(planId, amount, enableAutoRenew)          |                        |                     |
   |------------------------->|                           |                        |                     |
-  | openDeposit(planId, amount, autoRenew)                |                        |                     |
-  |------------------------->|                           |                        |                     |
-  |                          | reserve(estimatedInterest)|                        |                     |
-  |                          |------------------------------------------------------>|                     |
-  |                          | deposit(user, amount)     |                        |                     |
-  |                          |-------------------------->| (USDC: user → vault)   |                     |
-  |                          | mint(user)                |                        |                     |
+  |                          | reserve(estimatedInterest) |                        |                     |
+  |                          |------------------------------------------------------>| totalReserved += X |
+  |                          | deposit(msg.sender, amount)|                        |                     |
+  |                          |-------------------------->| USDC.safeTransferFrom(user, TV, amount)        |
+  |                          | deposits[depositId] = cert |                        |                     |
+  |                          | depositOwner[depositId] = msg.sender                |                     |
+  |                          | mint(msg.sender)          |                        |                     |
   |                          |---------------------------------------------------------------------------->|
-  |                          | deposits[depositId] = cert|                        |                     |
-  |<-------------------------| return depositId          |                        |                     |
+  |<-------------------------| return depositId         |                        |                     |
 ```
 
-- **Principal**: User → TokenVault (qua `tokenVault.deposit(msg.sender, amount)`).
-- **Interest**: InterestVault `reserve(estimatedInterest)`.
-- **Ownership**: DepositNFT `mint(user)`; tokenId = depositId.
+- **Principal:** User → TokenVault (TokenVault gọi `USDC.safeTransferFrom(user, this, amount)`).
+- **Interest:** InterestVault `reserve(estimatedInterest)` → `totalReserved += amount`; phải `amount <= availableBalance()`.
+- **Ownership:** DepositNFT `mint(user)`; tokenId = depositId. `depositOwner[depositId] = msg.sender` (để admin biết chủ sau khi NFT burn).
 
 ### 3.2 Withdraw at Maturity (withdraw)
+
+**Điều kiện:** Caller = owner của NFT (depositNFT.ownerOf(tokenId)), cert.status = ACTIVE, block.timestamp >= maturityTime.
 
 ```
 User                    SavingsBank                 TokenVault              InterestVault           DepositNFT
   |                          |                           |                        |                     |
   | withdraw(tokenId)        |                           |                        |                     |
   |------------------------->|                           |                        |                     |
+  |                          | interest = calculateInterest(principal, lockedAprBps, durationDays)         |
   |                          | release(interest)         |                        |                     |
-  |                          |------------------------------------------------------>|                     |
+  |                          |------------------------------------------------------>| totalReserved -= X |
+  |                          | cert.status = WITHDRAWN   |                        |                     |
   |                          | withdraw(user, principal) |                        |                     |
-  |                          |-------------------------->| (USDC: vault → user)   |                     |
+  |                          |-------------------------->| USDC.safeTransfer(user, principal)            |
   |                          | withdraw(user, interest)  |                        |                     |
-  |                          |------------------------------------------>| (USDC: vault → user)   |
+  |                          |------------------------------------------>| USDC.safeTransfer(user, interest) |
   |                          | burn(tokenId)             |                        |                     |
   |                          |---------------------------------------------------------------------------->|
-  |                          | cert.status = WITHDRAWN   |                        |                     |
+  |<-------------------------| (user đã nhận principal + interest trên chain)     |                     |
 ```
+
+- **Principal:** TokenVault → User.
+- **Interest:** InterestVault `release(interest)` rồi `withdraw(user, interest)` → User nhận lãi.
+- **NFT:** Burn; certificate status = WITHDRAWN.
 
 ### 3.3 Early Withdraw (earlyWithdraw)
 
-- **User nhận**: principal − penalty (từ TokenVault).
-- **Penalty**: TokenVault → InterestVault (tăng liquidity).
-- **Reserved interest**: InterestVault `release(reservedInterest)` (không trả lãi cho user).
-- DepositNFT `burn(tokenId)`; cert.status = EARLY_WITHDRAWN.
+**Điều kiện:** Caller = owner của NFT, cert.status = ACTIVE, block.timestamp < maturityTime.
+
+```
+User                    SavingsBank                 TokenVault              InterestVault           DepositNFT
+  |                          |                           |                        |                     |
+  | earlyWithdraw(tokenId)   |                           |                        |                     |
+  |------------------------->|                           |                        |                     |
+  |                          | penalty = principal * penaltyBps / 10000            |                     |
+  |                          | userReceives = principal - penalty                  |                     |
+  |                          | reservedInterest = calculateInterest(...)          |                     |
+  |                          | release(reservedInterest) |                        |                     |
+  |                          |------------------------------------------------------>| totalReserved -= X |
+  |                          | cert.status = EARLY_WITHDRAWN                       |                     |
+  |                          | withdraw(user, userReceives)                        |                     |
+  |                          |-------------------------->| USDC → user (gốc − phạt)                     |
+  |                          | withdraw(SB, penalty)     |                        |                     |
+  |                          |-------------------------->| USDC → SavingsBank (penalty)                 |
+  |                          | approve(InterestVault)    |                        |                     |
+  |                          | (SavingsBank approve IV)  |                        |                     |
+  |                          | deposit(SavingsBank, penalty)                       |                     |
+  |                          |------------------------------------------>| USDC: SB → IV (penalty)  |
+  |                          | burn(tokenId)             |                        |                     |
+  |                          |---------------------------------------------------------------------------->|
+  |<-------------------------| (user đã nhận principal - penalty)                  |                     |
+```
+
+- **User nhận:** Chỉ `principal - penalty` (từ TokenVault).
+- **Penalty:** TokenVault → SavingsBank (withdraw to SB) → SavingsBank approve InterestVault → InterestVault.deposit(SB, penalty) → penalty vào InterestVault (tăng liquidity).
+- **Reserved interest:** Release (không trả lãi cho user).
+- **NFT:** Burn; cert.status = EARLY_WITHDRAWN.
 
 ### 3.4 Auto-Renew (autoRenew)
 
-- **Điều kiện**: Đã đáo hạn, trong grace period (2 ngày), `isAutoRenewEnabled == true`.
-- **Flow**: Tính interest cũ → InterestVault `release(interest)` → chuyển interest vào TokenVault (compound) → tạo deposit mới với **lockedAprBps** và duration cũ → InterestVault `reserve(newEstimatedInterest)` → DepositNFT burn(old), mint(new).
-- **Kết quả**: Deposit cũ status = RENEWED; deposit mới principal = oldPrincipal + interest, APR giữ nguyên (locked).
+**Điều kiện:** Caller = owner của NFT, cert.status = ACTIVE, isAutoRenewEnabled, block.timestamp >= maturityTime, block.timestamp <= maturityTime + 2 days.
+
+```
+User                    SavingsBank                 TokenVault              InterestVault           DepositNFT
+  |                          |                           |                        |                     |
+  | autoRenew(tokenId)       |                           |                        |                     |
+  |------------------------->|                           |                        |                     |
+  |                          | interest = calculateInterest(oldCert)               |                     |
+  |                          | newPrincipal = oldPrincipal + interest              |                     |
+  |                          | release(interest)         |                        |                     |
+  |                          |------------------------------------------------------>| totalReserved -= X |
+  |                          | withdraw(SB, interest)    |                        |                     |
+  |                          |------------------------------------------>| USDC: IV → SB            |
+  |                          | approve(TokenVault)       |                        |                     |
+  |                          | deposit(SB, interest)     |                        |                     |
+  |                          |-------------------------->| (compound: interest vào TV)                  |
+  |                          | reserve(newEstimatedInterest)                      |                     |
+  |                          |------------------------------------------------------>| totalReserved += Y |
+  |                          | oldCert.status = RENEWED  |                        |                     |
+  |                          | burn(oldTokenId)          |                        |                     |
+  |                          |---------------------------------------------------------------------------->|
+  |                          | deposits[newId] = newCert (lockedAprBps, same duration)                   |
+  |                          | depositOwner[newId] = user |                        |                     |
+  |                          | mint(user)                |                        |                     |
+  |                          |---------------------------------------------------------------------------->|
+  |<-------------------------| return newDepositId       |                        |                     |
+```
+
+- **Interest cũ:** Release từ InterestVault → rút về SavingsBank → approve TokenVault → deposit vào TokenVault (compound).
+- **Deposit mới:** principal = oldPrincipal + interest, lockedAprBps và duration giữ nguyên (locked), reserve lãi mới cho deposit mới.
+- **NFT:** Burn cũ, mint mới; cert cũ status = RENEWED.
 
 ### 3.5 Manual Renew
 
-- User gọi **withdraw** (nhận gốc + lãi) rồi gọi **openDeposit** với số tiền và plan mới. APR/duration theo **plan hiện tại** (không lock).
+- User gọi **withdraw(tokenId)** → nhận gốc + lãi về ví.
+- User gọi **openDeposit(planId, amount, enableAutoRenew)** với số tiền và plan tùy chọn. APR và duration theo **plan hiện tại** (không lock như autoRenew).
+
+### 3.6 Admin: Fund Interest Vault (fundVault)
+
+**Gọi bởi:** Admin (owner SavingsBank).
+
+```
+Admin                    SavingsBank                 InterestVault           USDC
+  |                          |                           |                     |
+  | approve(InterestVault, amount)                         |                     |
+  |----------------------------------------------------------------------------->|
+  | fundVault(amount)        |                           |                     |
+  |------------------------->|                           |                     |
+  |                          | interestVault.deposit(admin, amount)              |                     |
+  |                          |-------------------------->|                     |
+  |                          |                           | safeTransferFrom(admin, IV, amount)          |
+  |                          |                           |<-------------------------------------------------|
+  |<-------------------------|                           |                     |
+```
+
+- **Kết quả:** USDC từ ví Admin → InterestVault; tăng liquidity để reserve lãi cho deposit mới.
+
+### 3.7 Admin: Withdraw from Interest Vault (withdrawVault)
+
+**Gọi bởi:** Admin. **Điều kiện:** amount <= interestVault.availableBalance() (không rút phần reserved).
+
+```
+Admin                    SavingsBank                 InterestVault
+  |                          |                           |
+  | withdrawVault(amount)    |                           |
+  |------------------------->|                           |
+  |                          | interestVault.withdraw(admin, amount)             |
+  |                          |-------------------------->|
+  |                          |                           | safeTransfer(admin, amount)
+  |<-------------------------------------------------------- (USDC: IV → Admin)
+```
+
+- **Kết quả:** USDC từ InterestVault → ví Admin (chỉ phần available).
+
+### 3.8 Admin: Plan Management
+
+| Hàm | Gọi bởi | Hiệu ứng |
+|-----|---------|----------|
+| **createPlan(name, durationDays, minDeposit, maxDeposit, aprBps, penaltyBps)** | Admin | Thêm savingPlans[nextPlanId]; nextPlanId++; plan mặc định isActive = true. |
+| **updatePlan(planId, aprBps, earlyWithdrawPenaltyBps)** | Admin | Cập nhật aprBps và earlyWithdrawPenaltyBps của plan (không đổi min/max/duration). Deposit đang active vẫn dùng lockedAprBps. |
+| **enablePlan(planId, enabled)** | Admin | savingPlans[planId].isActive = enabled. Plan tắt thì user không mở deposit mới với plan đó. |
+
+Không có chuyển token; chỉ thay đổi state trong SavingsBank.
+
+### 3.9 Admin: Pause / Unpause
+
+| Hàm | Gọi bởi | Hiệu ứng |
+|-----|---------|----------|
+| **pause()** | Admin | Contract chuyển trạng thái paused. Khi paused: openDeposit, withdraw, earlyWithdraw, autoRenew revert (EnforcedPause). |
+| **unpause()** | Admin | Bật lại; user có thể giao dịch bình thường. |
+
+Không chuyển token; chỉ modifier whenNotPaused / whenPaused.
+
+### 3.10 User: setAutoRenew(tokenId, enabled)
+
+**Gọi bởi:** Owner của NFT. Chỉ cập nhật `deposits[depositId].isAutoRenewEnabled = enabled`. Không chuyển token, không gọi vault/NFT.
+
+---
+
+### 3.11 Tổng hợp luồng (summary)
+
+| Luồng | Token chuyển (USDC) | Reserve/Release | NFT |
+|-------|----------------------|------------------|-----|
+| openDeposit | User → TokenVault (principal) | IV.reserve(estimatedInterest) | mint(user) |
+| withdraw | TokenVault → User (principal), IV → User (interest) | IV.release(interest) | burn |
+| earlyWithdraw | TokenVault → User (principal − penalty), TV → SB → IV (penalty) | IV.release(reservedInterest) | burn |
+| autoRenew | IV → SB → TokenVault (interest compound), không chuyển ra user | IV.release(interest), IV.reserve(newInterest) | burn(old), mint(new) |
+| fundVault | Admin → InterestVault | — | — |
+| withdrawVault | InterestVault → Admin | — | — |
+| createPlan / updatePlan / enablePlan / pause / unpause / setAutoRenew | Không | — | — |
 
 ---
 

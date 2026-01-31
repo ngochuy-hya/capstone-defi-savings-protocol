@@ -67,10 +67,16 @@ flowchart TB
 
 ### Data Flow (tóm tắt)
 
-- **openDeposit:** User approve TokenVault → SavingsBank.openDeposit → Principal → TokenVault, Interest reserved → InterestVault, NFT mint → User.
-- **withdraw:** SavingsBank.release(interest) → InterestVault; TokenVault.withdraw(principal), InterestVault.withdraw(interest) → User; NFT burn.
-- **earlyWithdraw:** User nhận principal − penalty; penalty → InterestVault; reserved interest released; NFT burn.
-- **autoRenew:** Trong 2 ngày sau đáo hạn, nếu bật auto-renew: interest → compound vào principal mới, APR **locked**, NFT cũ burn, NFT mới mint.
+| Luồng | Token (USDC) | Reserve/Release | NFT |
+|-------|--------------|------------------|-----|
+| **openDeposit** | User → TokenVault (principal) | InterestVault.reserve(estimatedInterest) | mint(user) |
+| **withdraw** | TokenVault → User (principal), InterestVault → User (interest) | InterestVault.release(interest) | burn |
+| **earlyWithdraw** | TokenVault → User (principal − penalty); penalty → InterestVault | InterestVault.release(reservedInterest) | burn |
+| **autoRenew** | Interest → compound vào TokenVault (không ra user) | release(interest), reserve(newInterest) | burn(old), mint(new) |
+| **fundVault** (admin) | Admin → InterestVault | — | — |
+| **withdrawVault** (admin) | InterestVault → Admin (chỉ available) | — | — |
+
+Chi tiết từng bước (sequence diagram, điều kiện, state): **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)** § 3. Data Flow.
 
 ### Access Control (tóm tắt)
 

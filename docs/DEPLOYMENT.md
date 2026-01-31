@@ -85,16 +85,74 @@ npx hardhat deploy --network sepolia
 
 ---
 
-## 6. Verify on Etherscan (Optional)
+## 6. Verify on Etherscan
+
+Cần có `ETHERSCAN_API_KEY` trong `.env`. Thay `0x...` bằng địa chỉ thật từ `deployments/sepolia/`.
+
+### Lệnh verify từng contract (Sepolia)
+
+**1. MockUSDC** (không tham số constructor):
 
 ```bash
-npx hardhat verify --network sepolia <CONTRACT_ADDRESS> <CONSTRUCTOR_ARGS>
+npx hardhat verify --network sepolia <MOCK_USDC_ADDRESS>
 ```
 
-Ví dụ SavingsBank (constructor: usdc, tokenVault, interestVault, depositNFT):
+**2. TokenVault** (1 tham số: USDC):
 
 ```bash
-npx hardhat verify --network sepolia 0x... 0x... 0x... 0x... 0x...
+npx hardhat verify --network sepolia <TOKEN_VAULT_ADDRESS> <MOCK_USDC_ADDRESS>
+```
+
+**3. InterestVault** (1 tham số: USDC):
+
+```bash
+npx hardhat verify --network sepolia <INTEREST_VAULT_ADDRESS> <MOCK_USDC_ADDRESS>
+```
+
+**4. MockDepositNFT** (không tham số):
+
+```bash
+npx hardhat verify --network sepolia <MOCK_DEPOSIT_NFT_ADDRESS>
+```
+
+**5. SavingsBank** (4 tham số: usdc, tokenVault, interestVault, depositNFT):
+
+```bash
+npx hardhat verify --network sepolia <SAVINGS_BANK_ADDRESS> <MOCK_USDC_ADDRESS> <TOKEN_VAULT_ADDRESS> <INTEREST_VAULT_ADDRESS> <MOCK_DEPOSIT_NFT_ADDRESS>
+```
+
+### Lấy địa chỉ đã deploy
+
+```bash
+# Xem địa chỉ trong file deployment
+cat deployments/sepolia/MockUSDC.json
+cat deployments/sepolia/TokenVault.json
+# ... tương tự
+```
+
+Hoặc chạy script:
+
+```bash
+npx hardhat run scripts/test-deployment/00_check_deployment.ts --network sepolia
+```
+
+### Ví dụ (thay bằng địa chỉ thật từ deployments/sepolia/)
+
+```bash
+# MockUSDC (0 args)
+npx hardhat verify --network sepolia 0xMockUsdcAddress
+
+# TokenVault (usdc)
+npx hardhat verify --network sepolia 0xTokenVaultAddress 0xMockUsdcAddress
+
+# InterestVault (usdc)
+npx hardhat verify --network sepolia 0xInterestVaultAddress 0xMockUsdcAddress
+
+# MockDepositNFT (0 args)
+npx hardhat verify --network sepolia 0xMockDepositNftAddress
+
+# SavingsBank (usdc, tokenVault, interestVault, depositNFT)
+npx hardhat verify --network sepolia 0xSavingsBankAddress 0xMockUsdcAddress 0xTokenVaultAddress 0xInterestVaultAddress 0xMockDepositNftAddress
 ```
 
 ---

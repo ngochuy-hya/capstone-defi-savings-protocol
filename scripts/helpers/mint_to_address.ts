@@ -11,10 +11,10 @@ import { ethers, deployments } from "hardhat";
  */
 
 // TODO: ĐỔI THÀNH ĐỊA CHỈ CỦA BẠN
-const TARGET_ADDRESS = "0x9610138d37A061b29b5f1c0793f385bD1b799Eac";
+const TARGET_ADDRESS = "0x7Fd5E1B5954B00027cA0C2FC152449411089BF1d";
 
 // Số USDC muốn mint (ví dụ "1000" = 1000 USDC)
-const AMOUNT_USDC = "100000";
+const AMOUNT_USDC = "100000000";
 
 async function main() {
   console.log("\n💰 Mint MockUSDC to Fixed Address\n");
