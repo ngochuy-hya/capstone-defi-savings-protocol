@@ -302,46 +302,71 @@ Không chuyển token; chỉ modifier whenNotPaused / whenPaused.
 
 ## 4. Access Control
 
-### 4.1 Ownership & Permissions
+- **User** = người dùng (ví EOA): mở deposit, rút, gia hạn. Quyền theo từng hàm (chủ NFT, plan active, …).
+- **Admin** = ví sở hữu contract SavingsBank lúc deploy; quản lý plan, vault, pause. Không gọi trực tiếp TokenVault / InterestVault / DepositNFT.
+- **SavingsBank** = contract (orchestrator); là bên duy nhất gọi TokenVault, InterestVault, DepositNFT. Không dùng từ "owner" trong bảng dưới — dùng Admin / SavingsBank.
 
-| Contract | Owner | Ai có thể gọi hàm đặc quyền |
-|----------|--------|-----------------------------|
-| **SavingsBank** | Admin (deployer) | Admin: createPlan, updatePlan, enablePlan, fundVault, withdrawVault, pause, unpause. |
-| **TokenVault** | SavingsBank | Chỉ SavingsBank: deposit, withdraw. |
-| **InterestVault** | SavingsBank | Chỉ SavingsBank: deposit, withdraw, reserve, release. |
-| **DepositNFT** | SavingsBank | Chỉ SavingsBank: mint, burn. |
+---
 
-### 4.2 User vs Admin
+### 4.1 Access Control Matrix (SavingsBank)
 
-| Hành động | Gọi bởi | Điều kiện |
-|-----------|---------|-----------|
-| openDeposit | User | approve TokenVault, plan active, amount trong [min, max], vault đủ available balance. |
-| withdraw | User (owner của NFT) | Deposit ACTIVE, đã đáo hạn. |
-| earlyWithdraw | User (owner của NFT) | Deposit ACTIVE, chưa đáo hạn. |
-| autoRenew | User hoặc Automation | Deposit ACTIVE, đã đáo hạn, trong grace period, isAutoRenewEnabled. |
-| setAutoRenew | User (owner của NFT) | Deposit ACTIVE. |
-| createPlan, updatePlan, enablePlan | Admin | onlyOwner. |
-| fundVault, withdrawVault | Admin | onlyOwner. |
-| pause, unpause | Admin | onlyOwner. |
+Các hàm trên contract **SavingsBank**. ✓ = vai trò đó được gọi; — = không áp dụng.
 
-### 4.3 Diagram Access Control (Mermaid)
+| Function | User | Admin | Mô tả |
+|---------|:----:|:-----:|-------|
+| **openDeposit**(planId, amount, enableAutoRenew) | ✓ | ✓ | Mở deposit mới (thường User; Admin cũng gọi được nếu muốn). |
+| **withdraw**(tokenId) | ✓ | — | Rút đúng hạn (chủ NFT, deposit đã đáo hạn). |
+| **earlyWithdraw**(tokenId) | ✓ | — | Rút sớm (chủ NFT, chưa đáo hạn). |
+| **autoRenew**(tokenId) | ✓ | — | Gia hạn trong 2 ngày sau đáo hạn (chủ NFT, bật auto-renew). |
+| **setAutoRenew**(tokenId, enabled) | ✓ | — | Bật/tắt auto-renew (chủ NFT). |
+| **createPlan**(name, durationDays, min, max, aprBps, penaltyBps) | — | ✓ | Tạo plan mới. |
+| **updatePlan**(planId, aprBps, penaltyBps) | — | ✓ | Sửa APR và penalty của plan. |
+| **enablePlan**(planId, enabled) | — | ✓ | Bật/tắt plan (plan tắt thì User không mở deposit). |
+| **fundVault**(amount) | — | ✓ | Nạp USDC từ ví Admin vào InterestVault. |
+| **withdrawVault**(amount) | — | ✓ | Rút USDC từ InterestVault về ví Admin (chỉ phần available). |
+| **pause**() | — | ✓ | Tạm dừng deposit/withdraw/earlyWithdraw/autoRenew. |
+| **unpause**() | — | ✓ | Bật lại contract. |
+
+*Lưu ý:* User/Admin đều gửi tx tới **SavingsBank**. Không gọi trực tiếp TokenVault, InterestVault, DepositNFT.
+
+---
+
+### 4.2 Hàm chỉ SavingsBank gọi (TokenVault, InterestVault, DepositNFT)
+
+Các contract này **không** do User hay Admin gọi trực tiếp. Chỉ **SavingsBank** (contract) gọi khi xử lý openDeposit, withdraw, earlyWithdraw, autoRenew, fundVault, withdrawVault.
+
+| Contract | Hàm | Gọi bởi | Mô tả |
+|----------|-----|---------|-------|
+| **TokenVault** | deposit(from, amount), withdraw(to, amount) | SavingsBank | Nhận gốc từ User; trả gốc (hoặc gốc − phạt) cho User. |
+| **InterestVault** | deposit(from, amount), withdraw(to, amount), reserve(amount), release(amount) | SavingsBank | Nhận liquidity từ Admin; reserve/release lãi; trả lãi cho User hoặc nhận penalty. |
+| **DepositNFT** | mint(to), burn(tokenId) | SavingsBank | Mint NFT khi mở deposit; burn khi rút hoặc gia hạn. |
+
+---
+
+### 4.3 Sơ đồ Access Control (Mermaid)
 
 ```mermaid
 flowchart LR
-    subgraph Actors
-        Admin[Admin / Owner]
+    subgraph Nguoi
+        Admin[Admin]
         User[User]
-        Automation[Automation]
     end
 
-    subgraph SavingsBank
-        OwnerOnly[onlyOwner: plan, vault, pause]
-        UserOps[User: openDeposit, withdraw, autoRenew, setAutoRenew]
+    subgraph Contract
+        SB[SavingsBank]
     end
 
-    Admin --> OwnerOnly
-    User --> UserOps
-    Automation --> UserOps
+    subgraph Chi_SavingsBank_goi
+        TV[TokenVault]
+        IV[InterestVault]
+        NFT[DepositNFT]
+    end
+
+    Admin -->|createPlan, fundVault, pause, ...| SB
+    User -->|openDeposit, withdraw, autoRenew, ...| SB
+    SB -->|deposit, withdraw| TV
+    SB -->|deposit, withdraw, reserve, release| IV
+    SB -->|mint, burn| NFT
 ```
 
 ---
